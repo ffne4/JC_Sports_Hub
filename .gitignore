@@ -45,5 +45,8 @@ app.*.map.json
 /android/app/release
 
 # Ignore generated Firebase options that may contain API keys
+# local firebase options
 lib/firebase_options.dart
-lib/firebase_options.dart
+
+# Ignore Android google-services that contain API keys
+android/app/google-services.json
