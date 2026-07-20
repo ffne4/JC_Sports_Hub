@@ -46,3 +46,4 @@ app.*.map.json
 
 # Ignore generated Firebase options that may contain API keys
 lib/firebase_options.dart
+lib/firebase_options.dart
