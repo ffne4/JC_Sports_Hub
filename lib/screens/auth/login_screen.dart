@@ -66,9 +66,11 @@ class _LoginScreenState extends State<LoginScreen> {
     required String email,
     required String name,
   }) {
+    final stateContext = context;
+
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         bool isSending = false;
         return StatefulBuilder(
           builder: (context, setState) => AlertDialog(
@@ -119,9 +121,9 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               TextButton(
                 onPressed: () {
-                  Navigator.pop(context);
+                  Navigator.pop(dialogContext);
                   Navigator.pushReplacementNamed(
-                    context,
+                    stateContext,
                     '/verify-otp',
                     arguments: {
                       'userId': userId,
@@ -145,7 +147,7 @@ class _LoginScreenState extends State<LoginScreen> {
     showDialog(
       context: context,
       barrierDismissible: true,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
         ),
@@ -266,99 +268,106 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _showForgotPasswordDialog() {
-    final resetEmailController = TextEditingController();
-
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
-        ),
-        title: const Text(
-          'Reset Password',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Enter your email and we will send you a reset link:',
-              style: TextStyle(
-                color: Colors.grey.shade600,
-                fontSize: AppSizes.fontSmall,
-              ),
+      builder: (dialogContext) {
+        final resetEmailController = TextEditingController();
+
+        return StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: resetEmailController,
-              keyboardType: TextInputType.emailAddress,
-              autofocus: true,
-              decoration: InputDecoration(
-                hintText: 'your@email.com',
-                prefixIcon: const Icon(Icons.email, color: AppColors.primary),
-                filled: true,
-                fillColor: AppColors.background,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
-                  borderSide: const BorderSide(
-                    color: AppColors.primary,
-                    width: 2,
+            title: const Text(
+              'Reset Password',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Enter your email and we will send you a reset link:',
+                  style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: AppSizes.fontSmall,
                   ),
                 ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              resetEmailController.dispose();
-            },
-            child: Text(
-              'Cancel',
-              style: TextStyle(color: Colors.grey.shade600),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final email = resetEmailController.text.trim();
-              if (!email.contains('@')) return;
-
-              Navigator.pop(context);
-              resetEmailController.dispose();
-
-              Map<String, dynamic> result = await _authService.resetPassword(
-                email: email,
-              );
-
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(result['message']),
-                    backgroundColor:
-                        result['success'] ? AppColors.accent : AppColors.error,
-                    behavior: SnackBarBehavior.floating,
+                const SizedBox(height: 16),
+                TextField(
+                  controller: resetEmailController,
+                  keyboardType: TextInputType.emailAddress,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: 'your@email.com',
+                    prefixIcon: const Icon(Icons.email, color: AppColors.primary),
+                    filled: true,
+                    fillColor: AppColors.background,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+                      borderSide: const BorderSide(
+                        color: AppColors.primary,
+                        width: 2,
+                      ),
+                    ),
                   ),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(dialogContext);
+                  resetEmailController.dispose();
+                },
+                child: Text(
+                  'Cancel',
+                  style: TextStyle(color: Colors.grey.shade600),
+                ),
               ),
-            ),
-            child: const Text(
-              'Send Reset Link',
-              style: TextStyle(color: Colors.white),
-            ),
+              ElevatedButton(
+                onPressed: () async {
+                  final email = resetEmailController.text.trim();
+                  if (!email.contains('@')) return;
+
+                  Navigator.pop(dialogContext);
+                  resetEmailController.dispose();
+
+                  if (!mounted) return;
+                  final messenger = ScaffoldMessenger.of(context);
+
+                  Map<String, dynamic> result = await _authService.resetPassword(
+                    email: email,
+                  );
+
+                  if (mounted) {
+                    messenger.showSnackBar(
+                      SnackBar(
+                        content: Text(result['message']),
+                        backgroundColor:
+                            result['success'] ? AppColors.accent : AppColors.error,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+                  ),
+                ),
+                child: const Text(
+                  'Send Reset Link',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 

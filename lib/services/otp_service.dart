@@ -2,24 +2,13 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server.dart';
+import '../../utils/secrets.dart';
 
-// This service handles everything OTP related
-// - Generating the 6-digit code
-// - Sending it via Gmail SMTP directly (no third-party API)
-// - Saving it to Firestore with expiry
-// - Verifying what the user types
 class OtpService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Gmail credentials used to send emails via SMTP
-  // This is a real Gmail account sending real emails through Google's servers
-  static const String _senderEmail = 'wanswadrake@gmail.com';
-  static const String _senderAppPassword = 'xgscgmsjpgifyomw';
-
-  // gmail() is a built-in helper in the mailer package
-  // It automatically configures the correct SMTP host, port and security settings for Gmail
-  // We create this once and reuse it for every email we send
-  final SmtpServer _smtpServer = gmail(_senderEmail, _senderAppPassword);
+  static const String _senderEmail = AppSecrets.senderEmail;
+  late final SmtpServer _smtpServer = AppSecrets.smtpServer;
 
   // Generates a random 6-digit number as a string
   // Example output: "847291"

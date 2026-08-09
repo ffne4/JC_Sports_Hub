@@ -135,7 +135,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 const Text('Wallet Balance',
                                     style: TextStyle(color: Colors.grey, fontSize: AppSizes.fontSmall)),
                                 Text(
-                                  _formatAmount(balance) + ' UGX',
+                                  '${_formatAmount(balance)} UGX',
                                   style: const TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: AppSizes.fontLarge,
@@ -230,6 +230,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   String _formatAmount(int amount) {
     return amount.toString().replaceAllMapped(
-        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => m[1]! + ',');
+        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]!},');
   }
 }

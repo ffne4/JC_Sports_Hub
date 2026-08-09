@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:http_parser/http_parser.dart';
 import '../../services/post_service.dart';
 import '../../utils/constants.dart';
+import '../../utils/secrets.dart';
 
 class CreatePostScreen extends StatefulWidget {
   final String userId;
@@ -34,14 +35,9 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   double _uploadProgress = 0.0;
   bool _isUploading = false;
 
-  // Cloudinary credentials
-  static const String _cloudName = 'dz086k3up';
-  static const String _uploadPreset = 'oudhjw1w';
-
   final List<String> _sports = [
     'General',
     'Football',
-    'Basketball',
     'Volleyball',
     'Athletics',
     'Other',
@@ -141,7 +137,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   Future<String> _uploadToCloudinary(File imageFile) async {
     // Cloudinary upload URL - uses our cloud name
     final Uri uploadUrl = Uri.parse(
-      'https://api.cloudinary.com/v1_1/$_cloudName/image/upload',
+      'https://api.cloudinary.com/v1_1/${AppSecrets.cloudinaryCloudName}/image/upload',
     );
 
     // MultipartRequest lets us send files over HTTP
@@ -149,7 +145,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     final request = http.MultipartRequest('POST', uploadUrl);
 
     // Add the upload preset - tells Cloudinary which settings to use
-    request.fields['upload_preset'] = _uploadPreset;
+    request.fields['upload_preset'] = AppSecrets.cloudinaryUploadPreset;
 
     // Add the image file to the request
     // MultipartFile.fromPath reads the file from device storage

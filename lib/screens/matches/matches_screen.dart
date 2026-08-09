@@ -6,6 +6,7 @@ import '../../services/match_service.dart';
 import '../../services/wallet_service.dart';
 import '../../utils/constants.dart';
 import 'match_detail_screen.dart';
+import '../bets/bets_screen.dart';
 
 class MatchesScreen extends StatefulWidget {
   const MatchesScreen({super.key});
@@ -19,6 +20,7 @@ class _MatchesScreenState extends State<MatchesScreen>
   late TabController _tabController;
   final MatchService _matchService = MatchService();
   final String? _currentUserId = FirebaseAuth.instance.currentUser?.uid;
+  int _betAmount = 0;
 
   @override
   void initState() {
@@ -611,12 +613,12 @@ class _MatchesScreenState extends State<MatchesScreen>
     final double odds = team == 'A' ? match.oddsA : match.oddsB;
 
     if (balance < WalletService.minimumBet) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text(
             'Insufficient balance. Need at least ${WalletService.minimumBet} UGX. Add funds in Wallet tab.'),
         backgroundColor: AppColors.error,
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 4),
+        duration: Duration(seconds: 4),
       ));
       return;
     }
@@ -669,26 +671,51 @@ class _MatchesScreenState extends State<MatchesScreen>
                 'Example: 1000 UGX × ${odds.toStringAsFixed(2)} = ${_fmtAmt((1000 * odds).floor())} UGX if you win',
                 style: TextStyle(color: Colors.grey.shade500, fontSize: 10)),
             const SizedBox(height: 12),
-            TextField(
-              controller: betController,
-              keyboardType: TextInputType.number,
-              autofocus: true,
-              onChanged: (val) {},
-              decoration: InputDecoration(
-                labelText: 'Bet Amount (UGX)',
-                hintText: 'Min ${WalletService.minimumBet} UGX',
-                prefixIcon: const Icon(Icons.money, color: AppColors.primary),
-                filled: true,
-                fillColor: Colors.grey.shade50,
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppSizes.radiusMedium)),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
-                  borderSide:
-                      const BorderSide(color: AppColors.primary, width: 2),
-                ),
-              ),
-            ),
+             TextField(
+               controller: betController,
+               keyboardType: TextInputType.number,
+               autofocus: true,
+               onChanged: (val) {
+                 final parsed = int.tryParse(val) ?? 0;
+                 setState(() {
+                   _betAmount = parsed > 0 ? parsed : 0;
+                 });
+               },
+               decoration: InputDecoration(
+                 labelText: 'Bet Amount (UGX)',
+                 hintText: 'Min ${WalletService.minimumBet} UGX',
+                 prefixIcon: const Icon(Icons.money, color: AppColors.primary),
+                 filled: true,
+                 fillColor: Colors.grey.shade50,
+                 border: OutlineInputBorder(
+                     borderRadius: BorderRadius.circular(AppSizes.radiusMedium)),
+                 focusedBorder: OutlineInputBorder(
+                   borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+                   borderSide:
+                       const BorderSide(color: AppColors.primary, width: 2),
+                 ),
+               ),
+             ),
+             if (_betAmount > 0)
+               Container(
+                 margin: const EdgeInsets.only(top: 10),
+                 padding: const EdgeInsets.all(10),
+                 decoration: BoxDecoration(
+                   color: AppColors.accent.withOpacity(0.08),
+                   borderRadius: BorderRadius.circular(AppSizes.radiusSmall),
+                   border: Border.all(color: AppColors.accent.withOpacity(0.3)),
+                 ),
+                 child: Row(
+                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                   children: [
+                     Text('Expected Return', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                     Text(
+                       '${_fmtAmt((_betAmount * odds).floor())} UGX',
+                       style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold, fontSize: 14),
+                     ),
+                   ],
+                 ),
+               ),
           ],
         ),
         actions: [
@@ -702,7 +729,7 @@ class _MatchesScreenState extends State<MatchesScreen>
               final amount = int.tryParse(betController.text) ?? 0;
 
               if (amount < WalletService.minimumBet) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                   content:
                       Text('Minimum bet is ${WalletService.minimumBet} UGX'),
                   backgroundColor: AppColors.error,
@@ -750,6 +777,17 @@ class _MatchesScreenState extends State<MatchesScreen>
                   behavior: SnackBarBehavior.floating,
                   duration: const Duration(seconds: 5),
                 ));
+
+                if (result['success'] == true) {
+                  Future.delayed(const Duration(milliseconds: 500), () {
+                    if (mounted) {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(builder: (context) => const BetsScreen()),
+                      );
+                    }
+                  });
+                }
               }
             },
             style: ElevatedButton.styleFrom(

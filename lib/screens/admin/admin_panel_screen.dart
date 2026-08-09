@@ -140,7 +140,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
             const Icon(Icons.pending, color: Colors.orange, size: 16),
             const SizedBox(width: 6),
             Expanded(
-                child: Text(post.userName + ' - ' + post.userType,
+                child: Text('${post.userName} - ${post.userType}',
                     style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: AppSizes.fontSmall))),
@@ -180,12 +180,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
               child: ElevatedButton.icon(
                 onPressed: () async {
                   await _postService.approvePost(post.id);
-                  if (mounted)
+                  if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                       content: Text('Post approved!'),
                       backgroundColor: Colors.green,
                       behavior: SnackBarBehavior.floating,
                     ));
+                  }
                 },
                 icon: const Icon(Icons.check, size: 18),
                 label: const Text('Approve'),
@@ -232,12 +233,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
             onPressed: () async {
               Navigator.pop(context);
               await _postService.deletePost(postId);
-              if (mounted)
+              if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                   content: Text('Post rejected.'),
                   backgroundColor: AppColors.error,
                   behavior: SnackBarBehavior.floating,
                 ));
+              }
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
             child: const Text('Reject', style: TextStyle(color: Colors.white)),
@@ -304,9 +306,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
           stream: _postService.getAnnouncements(),
           builder: (context, snapshot) {
             final list = snapshot.data ?? [];
-            if (list.isEmpty)
+            if (list.isEmpty) {
               return Text('No announcements yet.',
                   style: TextStyle(color: Colors.grey.shade500));
+            }
             return Column(
                 children: list
                     .map((a) => Container(
@@ -363,12 +366,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       });
       setState(() => _isPostingAnnouncement = false);
       _announcementController.clear();
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Announcement posted!'),
           backgroundColor: Colors.green,
           behavior: SnackBarBehavior.floating,
         ));
+      }
     } catch (e) {
       setState(() => _isPostingAnnouncement = false);
     }
@@ -473,12 +477,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                   .collection('suggestions')
                   .doc(docId)
                   .update({'adminReply': replyController.text.trim()});
-              if (mounted)
+              if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                   content: Text('Reply sent!'),
                   backgroundColor: Colors.green,
                   behavior: SnackBarBehavior.floating,
                 ));
+              }
             },
             icon: const Icon(Icons.send, size: 16),
             label: const Text('Send Reply'),
@@ -599,7 +604,7 @@ class _DepositCardState extends State<_DepositCard> {
   }
 
   String _fmt(int amount) => amount.toString().replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => m[1]! + ',');
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]!},');
 
   @override
   Widget build(BuildContext context) {
@@ -621,7 +626,7 @@ class _DepositCardState extends State<_DepositCard> {
           Expanded(
               child: Text(widget.tx.userName,
                   style: const TextStyle(fontWeight: FontWeight.bold))),
-          Text(_fmt(widget.tx.amount) + ' UGX',
+          Text('${_fmt(widget.tx.amount)} UGX',
               style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   color: Colors.green,
@@ -631,7 +636,7 @@ class _DepositCardState extends State<_DepositCard> {
         Row(children: [
           const Icon(Icons.phone, size: 14, color: Colors.grey),
           const SizedBox(width: 4),
-          Text('From: ' + widget.tx.userMomoNumber,
+          Text('From: ${widget.tx.userMomoNumber}',
               style: TextStyle(
                   color: Colors.grey.shade600, fontSize: AppSizes.fontSmall)),
         ]),
@@ -639,7 +644,7 @@ class _DepositCardState extends State<_DepositCard> {
         Row(children: [
           const Icon(Icons.tag, size: 14, color: Colors.grey),
           const SizedBox(width: 4),
-          Text('Ref: ' + widget.tx.reference,
+          Text('Ref: ${widget.tx.reference}',
               style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: AppSizes.fontSmall,
@@ -711,12 +716,13 @@ class _DepositCardState extends State<_DepositCard> {
           ElevatedButton.icon(
             onPressed: () async {
               await WalletService().rejectDeposit(widget.tx.id);
-              if (context.mounted)
+              if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                   content: Text('Deposit rejected'),
                   backgroundColor: AppColors.error,
                   behavior: SnackBarBehavior.floating,
                 ));
+              }
             },
             icon: const Icon(Icons.close, size: 16),
             label: const Text('Reject'),
@@ -739,7 +745,7 @@ class _WithdrawalCard extends StatelessWidget {
   const _WithdrawalCard({required this.tx});
 
   String _fmt(int amount) => amount.toString().replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => m[1]! + ',');
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]!},');
 
   @override
   Widget build(BuildContext context) {
@@ -762,7 +768,7 @@ class _WithdrawalCard extends StatelessWidget {
               child: Text(tx.userName,
                   style: const TextStyle(fontWeight: FontWeight.bold))),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Text(_fmt(tx.netAmount) + ' UGX',
+            Text('${_fmt(tx.netAmount)} UGX',
                 style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     color: Colors.orange,
@@ -793,7 +799,7 @@ class _WithdrawalCard extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                       fontSize: AppSizes.fontMedium,
                       color: AppColors.dark)),
-              Text(_fmt(tx.netAmount) + ' UGX',
+              Text('${_fmt(tx.netAmount)} UGX',
                   style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: AppSizes.fontLarge,
@@ -803,11 +809,7 @@ class _WithdrawalCard extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-            'Requested: ' +
-                _fmt(tx.amount) +
-                ' UGX | Fee: ' +
-                _fmt(tx.fee) +
-                ' UGX',
+            'Requested: ${_fmt(tx.amount)} UGX | Fee: ${_fmt(tx.fee)} UGX',
             style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
         const SizedBox(height: 12),
         Row(children: [
@@ -815,12 +817,13 @@ class _WithdrawalCard extends StatelessWidget {
             child: ElevatedButton.icon(
               onPressed: () async {
                 await WalletService().confirmWithdrawal(tx);
-                if (context.mounted)
+                if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text('Withdrawal confirmed for ' + tx.userName),
+                    content: Text('Withdrawal confirmed for ${tx.userName}'),
                     backgroundColor: Colors.green,
                     behavior: SnackBarBehavior.floating,
                   ));
+                }
               },
               icon: const Icon(Icons.check, size: 16),
               label: const Text('Mark as Sent'),
@@ -836,12 +839,13 @@ class _WithdrawalCard extends StatelessWidget {
           ElevatedButton.icon(
             onPressed: () async {
               await WalletService().rejectWithdrawal(tx);
-              if (context.mounted)
+              if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                   content: Text('Withdrawal rejected. Amount refunded.'),
                   backgroundColor: AppColors.error,
                   behavior: SnackBarBehavior.floating,
                 ));
+              }
             },
             icon: const Icon(Icons.close, size: 16),
             label: const Text('Reject'),
@@ -897,7 +901,7 @@ class _MatchesTabWidgetState extends State<_MatchesTabWidget> {
   }
 
   String _fmt(int amount) => amount.toString().replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => m[1]! + ',');
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]!},');
 
   @override
   Widget build(BuildContext context) {
@@ -1010,11 +1014,12 @@ class _MatchesTabWidgetState extends State<_MatchesTabWidget> {
               final time = await showTimePicker(
                   context: context,
                   initialTime: TimeOfDay.fromDateTime(_selectedDate));
-              if (time != null)
+              if (time != null) {
                 setState(() {
                   _selectedDate = DateTime(
                       date.year, date.month, date.day, time.hour, time.minute);
                 });
+              }
             }
           },
           child: Container(
@@ -1085,9 +1090,10 @@ class _MatchesTabWidgetState extends State<_MatchesTabWidget> {
           stream: MatchService().getAllMatches(),
           builder: (context, snapshot) {
             final matches = snapshot.data ?? [];
-            if (matches.isEmpty)
+            if (matches.isEmpty) {
               return Text('No matches yet.',
                   style: TextStyle(color: Colors.grey.shade500));
+            }
             return Column(
                 children: matches
                     .map((m) =>
@@ -1205,7 +1211,7 @@ class _MatchAdminCardState extends State<_MatchAdminCard> {
   }
 
   String _fmt(int amount) => amount.toString().replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => m[1]! + ',');
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]!},');
 
   @override
   Widget build(BuildContext context) {
@@ -1235,11 +1241,11 @@ class _MatchAdminCardState extends State<_MatchAdminCard> {
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(widget.match.teamA + ' vs ' + widget.match.teamB,
+                    Text('${widget.match.teamA} vs ${widget.match.teamB}',
                         style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: AppSizes.fontMedium)),
-                    Text(widget.match.venue + ' | ' + widget.match.sport,
+                    Text('${widget.match.venue} | ${widget.match.sport}',
                         style: TextStyle(
                             color: Colors.grey.shade500, fontSize: 11)),
                   ]),
@@ -1296,12 +1302,13 @@ class _MatchAdminCardState extends State<_MatchAdminCard> {
                   final b = double.tryParse(_oddsBController.text) ??
                       widget.match.oddsB;
                   await MatchService().updateOdds(widget.match.id, a, b);
-                  if (mounted)
+                  if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                       content: Text('Odds updated!'),
                       backgroundColor: Colors.green,
                       behavior: SnackBarBehavior.floating,
                     ));
+                  }
                 },
                 style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
@@ -1373,12 +1380,13 @@ class _MatchAdminCardState extends State<_MatchAdminCard> {
                     scoreB: int.tryParse(_scoreBController.text) ?? 0,
                     status: _currentStatus,
                   );
-                  if (mounted)
+                  if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                       content: Text('Score updated!'),
                       backgroundColor: Colors.green,
                       behavior: SnackBarBehavior.floating,
                     ));
+                  }
                 },
                 style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
@@ -1452,7 +1460,7 @@ class _MatchAdminCardState extends State<_MatchAdminCard> {
                               child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                Text(widget.match.teamA + ' bettors',
+                                Text('${widget.match.teamA} bettors',
                                     style: const TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.bold)),
@@ -1466,7 +1474,7 @@ class _MatchAdminCardState extends State<_MatchAdminCard> {
                               child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                Text(widget.match.teamB + ' bettors',
+                                Text('${widget.match.teamB} bettors',
                                     style: const TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.bold)),
@@ -1568,7 +1576,7 @@ class _MatchAdminCardState extends State<_MatchAdminCard> {
                       Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            Text(_fmt(bet['amount'] as int? ?? 0) + ' UGX',
+                            Text('${_fmt(bet['amount'] as int? ?? 0)} UGX',
                                 style: const TextStyle(
                                     fontWeight: FontWeight.bold, fontSize: 12)),
                             Text(
@@ -1579,10 +1587,8 @@ class _MatchAdminCardState extends State<_MatchAdminCard> {
                                 style: TextStyle(
                                     color: Colors.grey.shade500, fontSize: 11)),
                             Text(
-                                'Wins: ' +
-                                    _fmt(
-                                        bet['potentialWinnings'] as int? ?? 0) +
-                                    ' UGX',
+                                'Wins: ${_fmt(
+                                        bet['potentialWinnings'] as int? ?? 0)} UGX',
                                 style: TextStyle(
                                     color: isTeamA
                                         ? AppColors.primary
@@ -1592,7 +1598,7 @@ class _MatchAdminCardState extends State<_MatchAdminCard> {
                           ]),
                     ]),
                   );
-                }).toList(),
+                }),
               ],
             ],
 
@@ -1677,7 +1683,7 @@ class _MatchAdminCardState extends State<_MatchAdminCard> {
                   adminId: widget.adminId,
                   confirmationText: confirmController.text.trim(),
                 );
-                if (context.mounted)
+                if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                     content: Text(result['message']),
                     backgroundColor:
@@ -1685,6 +1691,7 @@ class _MatchAdminCardState extends State<_MatchAdminCard> {
                     behavior: SnackBarBehavior.floating,
                     duration: const Duration(seconds: 6),
                   ));
+                }
               },
               style:
                   ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
@@ -1702,7 +1709,7 @@ class _MatchAdminCardState extends State<_MatchAdminCard> {
                   adminId: widget.adminId,
                   confirmationText: confirmController.text.trim(),
                 );
-                if (context.mounted)
+                if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                     content: Text(result['message']),
                     backgroundColor:
@@ -1710,6 +1717,7 @@ class _MatchAdminCardState extends State<_MatchAdminCard> {
                     behavior: SnackBarBehavior.floating,
                     duration: const Duration(seconds: 6),
                   ));
+                }
               },
               style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
               child: Text(widget.match.teamB,
@@ -1728,13 +1736,14 @@ class _MatchAdminCardState extends State<_MatchAdminCard> {
                   adminId: widget.adminId,
                   confirmationText: confirmController.text.trim(),
                 );
-                if (context.mounted)
+                if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                     content: Text(result['message']),
                     backgroundColor:
                         result['success'] ? Colors.green : AppColors.error,
                     behavior: SnackBarBehavior.floating,
                   ));
+                }
               },
               child: const Text('Match Cancelled - Refund All'),
             ),

@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/wallet_model.dart';
 import '../../services/wallet_service.dart';
 import '../../utils/constants.dart';
+import '../bets/bets_screen.dart';
 
 class WalletScreen extends StatefulWidget {
   const WalletScreen({super.key});
@@ -19,6 +20,7 @@ class _WalletScreenState extends State<WalletScreen>
   final WalletService _walletService = WalletService();
   final String? _currentUserId = FirebaseAuth.instance.currentUser?.uid;
   Map<String, dynamic>? _userData;
+  Map<String, int>? _betSummary;
 
   @override
   void initState() {
@@ -35,6 +37,15 @@ class _WalletScreenState extends State<WalletScreen>
         .get();
     if (doc.exists && mounted) {
       setState(() => _userData = doc.data() as Map<String, dynamic>);
+    }
+    await _loadBetSummary();
+  }
+
+  Future<void> _loadBetSummary() async {
+    if (_currentUserId == null) return;
+    final summary = await _walletService.getUserBetSummary(_currentUserId!);
+    if (mounted) {
+      setState(() => _betSummary = summary);
     }
   }
 
@@ -173,6 +184,77 @@ class _WalletScreenState extends State<WalletScreen>
               ),
             ],
           ),
+
+          const SizedBox(height: 24),
+
+          // BET SUMMARY
+          if (_betSummary != null)
+            GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const BetsScreen()),
+                );
+              },
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 8,
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.sports_soccer,
+                        color: AppColors.primary,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'My Bets',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: AppSizes.fontSmall,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${_betSummary!['active']} active | ${_betSummary!['won']} won | ${_betSummary!['lost']} lost',
+                            style: TextStyle(
+                              color: Colors.grey.shade500,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(
+                      Icons.arrow_forward_ios,
+                      size: 16,
+                      color: Colors.grey,
+                    ),
+                  ],
+                ),
+              ),
+            ),
 
           const SizedBox(height: 24),
 
@@ -604,7 +686,7 @@ class _WalletScreenState extends State<WalletScreen>
                                   int.tryParse(amountController.text) ?? 0;
                               if (amount < WalletService.minimumDeposit) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
+                                  const SnackBar(
                                     content: Text(
                                         'Minimum deposit is ${WalletService.minimumDeposit} UGX'),
                                     backgroundColor: AppColors.error,
@@ -830,7 +912,7 @@ class _WalletScreenState extends State<WalletScreen>
           Container(
             width: 20,
             height: 20,
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: AppColors.primary,
               shape: BoxShape.circle,
             ),

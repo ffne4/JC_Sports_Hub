@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import '../../models/post_model.dart';
 import '../../services/post_service.dart';
 import '../../utils/constants.dart';
-import 'create_post_screen.dart';
 import 'comments_screen.dart';
 
 class HomeFeedScreen extends StatefulWidget {
@@ -20,10 +19,6 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
 
   Map<String, dynamic>? _userData;
   bool _isLoadingUser = true;
-
-  // Secret tap counter for admin access easter egg
-  int _tapCount = 0;
-  DateTime? _lastTapTime;
 
   @override
   void initState() {
@@ -60,174 +55,109 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
   bool get _isAdmin => _userData?['email'] == AppStrings.adminEmail;
   bool get _isGuest => _userData?['userType'] == 'guest';
 
-  // Secret 5-tap trigger — completely silent, no hints
-  void _onTitleTapped() {
-    final now = DateTime.now();
-
-    if (_lastTapTime != null && now.difference(_lastTapTime!).inSeconds > 3) {
-      _tapCount = 0;
-    }
-
-    _lastTapTime = now;
-    _tapCount++;
-
-    if (_tapCount >= 5) {
-      _tapCount = 0;
-      Navigator.pushNamed(context, '/admin-login');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.primary,
-        automaticallyImplyLeading: false,
-        title: GestureDetector(
-          onTap: _onTitleTapped,
-          child: const Row(
-            children: [
-              Icon(Icons.sports_soccer, color: Colors.white, size: 24),
-              SizedBox(width: 8),
-              Text(
-                'JC Sports Hub',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined, color: Colors.white),
-            onPressed: () {
-              // TODO: notifications screen
-            },
-          ),
-        ],
-      ),
-      body: _isLoadingUser
-          ? const Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
-            )
-          : RefreshIndicator(
-              color: AppColors.primary,
-              onRefresh: () async => await _loadUserData(),
-              child: CustomScrollView(
-                slivers: [
-                  SliverToBoxAdapter(child: _buildAnnouncementsSection()),
+    if (_isLoadingUser) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      );
+    }
 
-                  // FEED HEADER
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Community Feed',
-                            style: TextStyle(
-                              fontSize: AppSizes.fontLarge,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.dark,
-                            ),
-                          ),
-                          if (_isGuest)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade200,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Text(
-                                'Guest',
-                                style: TextStyle(
-                                  fontSize: AppSizes.fontSmall,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
+    return RefreshIndicator(
+      color: AppColors.primary,
+      onRefresh: () async => await _loadUserData(),
+      child: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(child: _buildAnnouncementsSection()),
+
+          // FEED HEADER
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Community Feed',
+                    style: TextStyle(
+                      fontSize: AppSizes.fontLarge,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.dark,
                     ),
                   ),
-
-                  // POSTS STREAM
-                  StreamBuilder<List<PostModel>>(
-                    stream: _postService.getFeedPosts(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const SliverToBoxAdapter(
-                          child: Padding(
-                            padding: EdgeInsets.all(40),
-                            child: Center(
-                              child: CircularProgressIndicator(
-                                color: AppColors.primary,
-                              ),
-                            ),
-                          ),
-                        );
-                      }
-
-                      if (snapshot.hasError) {
-                        return SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.all(40),
-                            child: Center(
-                              child: Text(
-                                'Error loading posts: ${snapshot.error}',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(color: AppColors.error),
-                              ),
-                            ),
-                          ),
-                        );
-                      }
-
-                      final posts = snapshot.data ?? [];
-
-                      if (posts.isEmpty) {
-                        return SliverToBoxAdapter(child: _buildEmptyFeed());
-                      }
-
-                      return SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) => _buildPostCard(posts[index]),
-                          childCount: posts.length,
+                  if (_isGuest)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Text(
+                        'Guest',
+                        style: TextStyle(
+                          fontSize: AppSizes.fontSmall,
+                          color: Colors.grey,
                         ),
-                      );
-                    },
-                  ),
-
-                  const SliverToBoxAdapter(child: SizedBox(height: 80)),
+                      ),
+                    ),
                 ],
               ),
             ),
-      floatingActionButton:
-          !_isGuest && !_isLoadingUser && _currentUserId != null
-              ? FloatingActionButton(
-                  backgroundColor: AppColors.primary,
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => CreatePostScreen(
-                          userId: _currentUserId!,
-                          userName: _userData?['fullName'] ?? 'Student',
-                          userType: _userData?['userType'] ?? 'bachelor',
-                        ),
+          ),
+
+          // POSTS STREAM
+          StreamBuilder<List<PostModel>>(
+            stream: _postService.getFeedPosts(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.all(40),
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.primary,
                       ),
-                    );
-                  },
-                  child: const Icon(Icons.add, color: Colors.white),
-                )
-              : null,
+                    ),
+                  ),
+                );
+              }
+
+              if (snapshot.hasError) {
+                return SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(40),
+                    child: Center(
+                      child: Text(
+                        'Error loading posts: ${snapshot.error}',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: AppColors.error),
+                      ),
+                    ),
+                  ),
+                );
+              }
+
+              final posts = snapshot.data ?? [];
+
+              if (posts.isEmpty) {
+                return SliverToBoxAdapter(child: _buildEmptyFeed());
+              }
+
+              return SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) => _buildPostCard(posts[index]),
+                  childCount: posts.length,
+                ),
+              );
+            },
+          ),
+
+          const SliverToBoxAdapter(child: SizedBox(height: 80)),
+        ],
+      ),
     );
   }
 

@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/wallet_model.dart';
+import '../utils/formatters.dart';
 
 class WalletService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -136,7 +137,7 @@ class WalletService {
         .get();
 
     if (existingPending.docs.isNotEmpty) {
-      final d = existingPending.docs.first.data() as Map<String, dynamic>;
+      final d = existingPending.docs.first.data();
       final createdAt = (d['createdAt'] as Timestamp?)?.toDate();
       if (createdAt != null) {
         final age = DateTime.now().difference(createdAt).inMinutes;
@@ -165,7 +166,7 @@ class WalletService {
     final todayStart =
         DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
     final todayCount = allUserDeposits.docs.where((doc) {
-      final data = doc.data() as Map<String, dynamic>;
+      final data = doc.data();
       final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
       return createdAt != null && createdAt.isAfter(todayStart);
     }).length;
@@ -180,7 +181,7 @@ class WalletService {
     try {
       final reference = _generateReference(userName);
       final expiresAt =
-          DateTime.now().add(Duration(minutes: depositReferenceExpiryMinutes));
+          DateTime.now().add(const Duration(minutes: depositReferenceExpiryMinutes));
 
       await _firestore.collection('transactions').add({
         'userId': userId,
@@ -303,18 +304,21 @@ class WalletService {
     required int amount,
   }) async {
     try {
-      if (amount < minimumBet)
+      if (amount < minimumBet) {
         return {'success': false, 'message': 'Minimum bet is $minimumBet UGX'};
-      if (amount > maximumBet)
+      }
+      if (amount > maximumBet) {
         return {
           'success': false,
           'message': 'Maximum bet is ${_fmt(maximumBet)} UGX'
         };
+      }
 
       final matchDoc =
           await _firestore.collection('matches').doc(matchId).get();
-      if (!matchDoc.exists)
+      if (!matchDoc.exists) {
         return {'success': false, 'message': 'Match not found'};
+      }
 
       final matchData = matchDoc.data() as Map<String, dynamic>;
 
@@ -322,7 +326,7 @@ class WalletService {
       final matchDate = (matchData['matchDate'] as Timestamp?)?.toDate();
       if (matchDate != null) {
         final bettingDeadline =
-            matchDate.add(Duration(minutes: bettingWindowMinutes));
+            matchDate.add(const Duration(minutes: bettingWindowMinutes));
         if (DateTime.now().isAfter(bettingDeadline)) {
           return {
             'success': false,
@@ -366,8 +370,9 @@ class WalletService {
 
       // Admin cannot bet
       final userDoc = await _firestore.collection('users').doc(userId).get();
-      if (!userDoc.exists)
+      if (!userDoc.exists) {
         return {'success': false, 'message': 'User not found'};
+      }
       final userData = userDoc.data() as Map<String, dynamic>;
       if (userData['isAdmin'] == true) {
         return {
@@ -394,6 +399,7 @@ class WalletService {
 
       // Potential winnings = bet amount × odds
       final int potentialWinnings = (amount * oddsAtPlacement).floor();
+      final String reference = _generateReference(userName);
 
       await _firestore.runTransaction((txn) async {
         final userRef = _firestore.collection('users').doc(userId);
@@ -409,7 +415,7 @@ class WalletService {
           'fee': 0,
           'netAmount': amount,
           'status': TransactionStatus.confirmed,
-          'reference': _generateReference(userName),
+          'reference': reference,
           'description': 'Bet on $betTeamName in $matchName',
           'matchId': matchId,
           'betTeam': betTeam,
@@ -443,12 +449,38 @@ class WalletService {
         });
       });
 
+      // Create bet document in bets collection after transaction succeeds
+      try {
+        await _firestore.collection('bets').add({
+          'userId': userId,
+          'userName': userName,
+          'userMomoNumber': userMomoNumber,
+          'matchId': matchId,
+          'matchName': matchName,
+          'betTeam': betTeam,
+          'betTeamName': betTeamName,
+          'amount': amount,
+          'oddsAtPlacement': oddsAtPlacement,
+          'potentialWinnings': potentialWinnings,
+          'status': 'pending',
+          'reference': reference,
+          'description': 'Bet on $betTeamName in $matchName',
+          'createdAt': FieldValue.serverTimestamp(),
+          'settledAt': null,
+          'settledBy': null,
+        });
+      } catch (e) {
+        // Bet doc creation failed but wallet transaction succeeded
+        // User can still see bet in transaction history
+      }
+
       return {
         'success': true,
         'message':
             'Bet placed! ${_fmt(amount)} UGX deducted.\nOdds: ${oddsAtPlacement.toStringAsFixed(2)}x | If you win: ${_fmt(potentialWinnings)} UGX',
         'odds': oddsAtPlacement,
         'potentialWinnings': potentialWinnings,
+        'reference': reference,
       };
     } catch (e) {
       return {'success': false, 'message': 'Failed to place bet: $e'};
@@ -472,8 +504,9 @@ class WalletService {
 
       final matchDoc =
           await _firestore.collection('matches').doc(matchId).get();
-      if (!matchDoc.exists)
+      if (!matchDoc.exists) {
         return {'success': false, 'message': 'Match not found'};
+      }
 
       final matchData = matchDoc.data() as Map<String, dynamic>;
 
@@ -486,8 +519,9 @@ class WalletService {
 
       final Map<String, dynamic> bets =
           Map<String, dynamic>.from(matchData['bets'] ?? {});
-      if (bets.isEmpty)
+      if (bets.isEmpty) {
         return {'success': false, 'message': 'No bets on this match'};
+      }
 
       if (winnerTeam == 'CANCELLED') {
         return await _refundAllBets(
@@ -497,7 +531,12 @@ class WalletService {
       final WriteBatch batch = _firestore.batch();
       final List<Map<String, dynamic>> receiptLines = [];
       final withdrawableAfter =
-          DateTime.now().add(Duration(hours: winningsHoldHours));
+          DateTime.now().add(const Duration(hours: winningsHoldHours));
+
+      final allMatchBets = await _firestore
+          .collection('bets')
+          .where('matchId', isEqualTo: matchId)
+          .get();
 
       // Pay winners based on their fixed odds at placement time
       bets.forEach((userId, betData) {
@@ -539,6 +578,17 @@ class WalletService {
           });
         }
       });
+
+      // Update bet statuses in bets collection
+      for (final betDoc in allMatchBets.docs) {
+        final betTeam = betDoc.data()['betTeam'] ?? '';
+        final newStatus = betTeam == winnerTeam ? 'won' : 'lost';
+        batch.update(betDoc.reference, {
+          'status': newStatus,
+          'settledAt': FieldValue.serverTimestamp(),
+          'settledBy': adminId,
+        });
+      }
 
       final matchRef = _firestore.collection('matches').doc(matchId);
       batch.update(matchRef, {
@@ -585,8 +635,13 @@ class WalletService {
     try {
       final WriteBatch batch = _firestore.batch();
 
+      final allMatchBets = await _firestore
+          .collection('bets')
+          .where('matchId', isEqualTo: matchId)
+          .get();
+
       bets.forEach((userId, betData) {
-        final userRef = _firestore.collection('users').doc(userId as String);
+        final userRef = _firestore.collection('users').doc(userId);
         batch.update(userRef,
             {'walletBalance': FieldValue.increment(betData['amount'] as int)});
 
@@ -608,6 +663,14 @@ class WalletService {
           'createdAt': FieldValue.serverTimestamp(),
         });
       });
+
+      for (final betDoc in allMatchBets.docs) {
+        batch.update(betDoc.reference, {
+          'status': 'refunded',
+          'settledAt': FieldValue.serverTimestamp(),
+          'settledBy': adminId,
+        });
+      }
 
       final matchRef = _firestore.collection('matches').doc(matchId);
       batch.update(matchRef, {
@@ -662,7 +725,7 @@ class WalletService {
           DateTime.now().year, DateTime.now().month, DateTime.now().day);
       int todayTotal = 0;
       for (final doc in allWithdrawals.docs) {
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data();
         final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
         if (createdAt != null && createdAt.isAfter(todayStart)) {
           todayTotal += (data['amount'] as int? ?? 0);
@@ -684,7 +747,7 @@ class WalletService {
           .get();
 
       for (final doc in winnings.docs) {
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data();
         final withdrawableAfter =
             (data['withdrawableAfter'] as Timestamp?)?.toDate();
         if (withdrawableAfter != null &&
@@ -701,8 +764,9 @@ class WalletService {
 
       // Check available balance
       final userDoc = await _firestore.collection('users').doc(userId).get();
-      if (!userDoc.exists)
+      if (!userDoc.exists) {
         return {'success': false, 'message': 'User not found'};
+      }
       final userData = userDoc.data() as Map<String, dynamic>;
       final total = (userData['walletBalance'] ?? 0) as int;
       final locked = (userData['lockedBalance'] ?? 0) as int;
@@ -840,8 +904,85 @@ class WalletService {
     }
   }
 
+  Future<Map<String, int>> getUserBetSummary(String userId) async {
+    try {
+      final snapshot = await _firestore
+          .collection('bets')
+          .where('userId', isEqualTo: userId)
+          .get();
+
+      int active = 0;
+      int won = 0;
+      int lost = 0;
+
+      for (final doc in snapshot.docs) {
+        final status = doc.data()['status'] ?? 'pending';
+        if (status == 'pending') active++;
+        if (status == 'won') won++;
+        if (status == 'lost') lost++;
+      }
+
+      return {
+        'active': active,
+        'won': won,
+        'lost': lost,
+      };
+    } catch (e) {
+      return {'active': 0, 'won': 0, 'lost': 0};
+    }
+  }
+
+  Future<Map<String, dynamic>> syncUserBets(String userId) async {
+    try {
+      final betTransactions = await _firestore
+          .collection('transactions')
+          .where('userId', isEqualTo: userId)
+          .where('type', isEqualTo: TransactionType.bet)
+          .get();
+
+      int synced = 0;
+      for (final txDoc in betTransactions.docs) {
+        final txData = txDoc.data();
+        final matchId = txData['matchId'] ?? '';
+        if (matchId.isEmpty) continue;
+
+        final existing = await _firestore
+            .collection('bets')
+            .where('userId', isEqualTo: userId)
+            .where('matchId', isEqualTo: matchId)
+            .limit(1)
+            .get();
+
+        if (existing.docs.isEmpty) {
+          await _firestore.collection('bets').add({
+            'userId': txData['userId'],
+            'userName': txData['userName'],
+            'userMomoNumber': txData['userMomoNumber'],
+            'matchId': matchId,
+            'matchName': txData['description'] ?? '',
+            'betTeam': txData['betTeam'] ?? '',
+            'betTeamName': txData['betTeam'] ?? '',
+            'amount': txData['amount'],
+            'oddsAtPlacement': txData['oddsAtPlacement'] ?? 1.5,
+            'potentialWinnings': txData['potentialWinnings'] ?? 0,
+            'status': 'pending',
+            'reference': txData['reference'],
+            'description': txData['description'],
+            'createdAt': txData['createdAt'],
+            'settledAt': null,
+            'settledBy': null,
+          });
+          synced++;
+        }
+      }
+
+      return {'success': true, 'synced': synced};
+    } catch (e) {
+      return {'success': false, 'message': 'Sync failed: $e'};
+    }
+  }
+
   String _fmt(int amount) {
-    return amount.toString().replaceAllMapped(
-        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
+    return formatCurrency(amount);
   }
 }

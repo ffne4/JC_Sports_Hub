@@ -50,3 +50,6 @@ lib/firebase_options.dart
 
 # Ignore Android google-services that contain API keys
 android/app/google-services.json
+
+# Secrets / local config that must not be committed
+lib/utils/secrets.dart
