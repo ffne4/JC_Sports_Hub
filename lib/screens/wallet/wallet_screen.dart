@@ -228,9 +228,9 @@ class _WalletScreenState extends State<WalletScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
+                          const Text(
                             'My Bets',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: AppSizes.fontSmall,
                             ),

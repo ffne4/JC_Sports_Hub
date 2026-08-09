@@ -77,7 +77,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
+                  const Text(
                     'Community Feed',
                     style: TextStyle(
                       fontSize: AppSizes.fontLarge,

@@ -13,7 +13,8 @@ class TournamentsScreen extends StatefulWidget {
   State<TournamentsScreen> createState() => _TournamentsScreenState();
 }
 
-class _TournamentsScreenState extends State<TournamentsScreen> with SingleTickerProviderStateMixin {
+class _TournamentsScreenState extends State<TournamentsScreen>
+    with SingleTickerProviderStateMixin {
   final TournamentService _tournamentService = TournamentService();
   late TabController _tabController;
   String? _currentTournamentId;
@@ -59,7 +60,8 @@ class _TournamentsScreenState extends State<TournamentsScreen> with SingleTicker
     if (_currentTournament == null) {
       return const Scaffold(
         body: Center(
-          child: Text('No active tournament currently', style: TextStyle(color: Colors.grey)),
+          child: Text('No active tournament currently',
+              style: TextStyle(color: Colors.grey)),
         ),
       );
     }
@@ -91,7 +93,8 @@ class _TournamentsScreenState extends State<TournamentsScreen> with SingleTicker
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.emoji_events, color: Colors.white, size: 28),
+                          const Icon(Icons.emoji_events,
+                              color: Colors.white, size: 28),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
@@ -108,7 +111,8 @@ class _TournamentsScreenState extends State<TournamentsScreen> with SingleTicker
                       const SizedBox(height: 8),
                       Text(
                         'Season: ${tournament.season}',
-                        style: const TextStyle(color: Colors.white70, fontSize: 14),
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 14),
                       ),
                       const SizedBox(height: 12),
                       Row(
@@ -207,7 +211,8 @@ class _TournamentsScreenState extends State<TournamentsScreen> with SingleTicker
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const Center(
-                        child: CircularProgressIndicator(color: AppColors.primary),
+                        child:
+                            CircularProgressIndicator(color: AppColors.primary),
                       );
                     }
                     final fixtures = snapshot.data ?? [];
@@ -235,7 +240,9 @@ class _TournamentsScreenState extends State<TournamentsScreen> with SingleTicker
                             title: Text(
                               '${fixture.homeCourse} vs ${fixture.awayCourse}',
                               style: TextStyle(
-                                fontWeight: isPast ? FontWeight.normal : FontWeight.bold,
+                                fontWeight: isPast
+                                    ? FontWeight.normal
+                                    : FontWeight.bold,
                               ),
                             ),
                             subtitle: Column(
@@ -323,7 +330,8 @@ class _TournamentsScreenState extends State<TournamentsScreen> with SingleTicker
           padding: const EdgeInsets.all(24),
           child: Column(
             children: [
-              Icon(Icons.how_to_reg_outlined, size: 64, color: Colors.grey.shade300),
+              Icon(Icons.how_to_reg_outlined,
+                  size: 64, color: Colors.grey.shade300),
               const SizedBox(height: 16),
               Text(
                 'Select course and game to register',
@@ -340,22 +348,24 @@ class _TournamentsScreenState extends State<TournamentsScreen> with SingleTicker
     }
 
     final user = FirebaseAuth.instance.currentUser!;
-    if (user == null) {
-      return const Center(child: Text('Please login to register', style: TextStyle(color: Colors.red)));
-    }
 
     return FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
+      future:
+          FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+          return const Center(
+              child: CircularProgressIndicator(color: AppColors.primary));
         }
         if (!snapshot.hasData || !snapshot.data!.exists) {
-          return const Center(child: Text('User profile not found', style: TextStyle(color: Colors.red)));
+          return const Center(
+              child: Text('User profile not found',
+                  style: TextStyle(color: Colors.red)));
         }
 
         final userData = (snapshot.data!.data() as Map<String, dynamic>) ?? {};
-        final studentName = userData['fullName'] ?? user.displayName ?? 'Student';
+        final studentName =
+            userData['fullName'] ?? user.displayName ?? 'Student';
         final studentNumber = userData['regNumber'] ?? '';
 
         return Padding(
@@ -384,12 +394,14 @@ class _TournamentsScreenState extends State<TournamentsScreen> with SingleTicker
                     const SizedBox(height: 8),
                     Text(
                       'Student: $studentName',
-                      style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                      style:
+                          TextStyle(color: Colors.grey.shade600, fontSize: 13),
                     ),
                     if (studentNumber.isNotEmpty)
                       Text(
                         'Reg No: $studentNumber',
-                        style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                        style: TextStyle(
+                            color: Colors.grey.shade600, fontSize: 13),
                       ),
                   ],
                 ),
@@ -441,7 +453,8 @@ class _TournamentsScreenState extends State<TournamentsScreen> with SingleTicker
               ),
               const SizedBox(height: 24),
               FutureBuilder<bool>(
-                future: _isAlreadyRegistered(tournament.id, _selectedCourse!, _selectedGame!),
+                future: _isAlreadyRegistered(
+                    tournament.id, _selectedCourse!, _selectedGame!),
                 builder: (context, snapshot) {
                   final isRegistered = snapshot.data ?? false;
                   return SizedBox(
@@ -450,8 +463,10 @@ class _TournamentsScreenState extends State<TournamentsScreen> with SingleTicker
                       onPressed: isRegistered
                           ? null
                           : () async {
-                              if (_selectedCourse == null || _selectedGame == null) return;
-                              final success = await _tournamentService.registerStudent(
+                              if (_selectedCourse == null ||
+                                  _selectedGame == null) return;
+                              final success =
+                                  await _tournamentService.registerStudent(
                                 tournamentId: tournament.id,
                                 course: _selectedCourse!,
                                 game: _selectedGame!,
@@ -464,7 +479,9 @@ class _TournamentsScreenState extends State<TournamentsScreen> with SingleTicker
                                     content: Text(success
                                         ? 'Registered successfully'
                                         : 'Already registered for this course+game'),
-                                    backgroundColor: success ? Colors.green : AppColors.error,
+                                    backgroundColor: success
+                                        ? Colors.green
+                                        : AppColors.error,
                                   ),
                                 );
                               }
@@ -475,7 +492,8 @@ class _TournamentsScreenState extends State<TournamentsScreen> with SingleTicker
                       ),
                       child: Text(
                         isRegistered ? 'Already Registered' : 'Register Now',
-                        style: const TextStyle(color: Colors.white, fontSize: 16),
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 16),
                       ),
                     ),
                   );
@@ -488,8 +506,10 @@ class _TournamentsScreenState extends State<TournamentsScreen> with SingleTicker
     );
   }
 
-  Future<bool> _isAlreadyRegistered(String tournamentId, String course, String game) async {
-    final registrations = await _tournamentService.getStudentRegistrations(tournamentId);
+  Future<bool> _isAlreadyRegistered(
+      String tournamentId, String course, String game) async {
+    final registrations =
+        await _tournamentService.getStudentRegistrations(tournamentId);
     return registrations.any((r) => r.course == course && r.game == game);
   }
 
@@ -534,7 +554,8 @@ class _TournamentsScreenState extends State<TournamentsScreen> with SingleTicker
                       backgroundColor: rankColor ?? AppColors.primary,
                       child: Text(
                         '${point.rank}',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.bold),
                       ),
                     ),
                     const SizedBox(width: 14),
@@ -555,7 +576,8 @@ class _TournamentsScreenState extends State<TournamentsScreen> with SingleTicker
                             runSpacing: 4,
                             children: point.gamePoints.entries.map((entry) {
                               return Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: AppColors.primary.withOpacity(0.08),
                                   borderRadius: BorderRadius.circular(8),
@@ -574,7 +596,8 @@ class _TournamentsScreenState extends State<TournamentsScreen> with SingleTicker
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
                           colors: [AppColors.primary, Color(0xFF2E7D32)],

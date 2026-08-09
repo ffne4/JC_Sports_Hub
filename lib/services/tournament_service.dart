@@ -33,12 +33,14 @@ class TournamentService {
         .limit(1)
         .snapshots()
         .map((snapshot) {
-          if (snapshot.docs.isEmpty) return null;
-          return TournamentModel.fromMap(snapshot.docs.first.data(), snapshot.docs.first.id);
-        });
+      if (snapshot.docs.isEmpty) return null;
+      return TournamentModel.fromMap(
+          snapshot.docs.first.data(), snapshot.docs.first.id);
+    });
   }
 
-  Future<void> updateTournamentStatus(String tournamentId, TournamentStatus status) async {
+  Future<void> updateTournamentStatus(
+      String tournamentId, TournamentStatus status) async {
     await _tournaments.doc(tournamentId).update({
       'status': status.name,
       'isActive': status != TournamentStatus.completed,
@@ -79,7 +81,8 @@ class TournamentService {
     return true;
   }
 
-  Future<List<TournamentSquad>> getSquadsByGame(String tournamentId, String game) async {
+  Future<List<TournamentSquad>> getSquadsByGame(
+      String tournamentId, String game) async {
     final snapshot = await _squads(tournamentId)
         .where('game', isEqualTo: game)
         .orderBy('registeredAt', descending: true)
@@ -89,7 +92,8 @@ class TournamentService {
         .toList();
   }
 
-  Future<List<TournamentSquad>> getStudentRegistrations(String tournamentId) async {
+  Future<List<TournamentSquad>> getStudentRegistrations(
+      String tournamentId) async {
     if (_currentUserId == null) return [];
     final snapshot = await _squads(tournamentId)
         .where('studentId', isEqualTo: _currentUserId)
@@ -99,15 +103,22 @@ class TournamentService {
         .toList();
   }
 
-  Future<void> _autoGenerateFixtures(String tournamentId, TournamentModel tournament) async {
-    final fixturesCollection = _tournaments.doc(tournamentId).collection('fixtures');
+  Future<void> _autoGenerateFixtures(
+      String tournamentId, TournamentModel tournament) async {
+    final fixturesCollection =
+        _tournaments.doc(tournamentId).collection('fixtures');
     final batch = _db.batch();
 
     for (final game in tournament.games) {
-      if (game == 'Chess' || game == 'Scrabble' || game == 'Ludo' || game == 'Matatu/Cards') {
-        await _generateKnockoutFixtures(batch, fixturesCollection, tournamentId, game, tournament.courses);
+      if (game == 'Chess' ||
+          game == 'Scrabble' ||
+          game == 'Ludo' ||
+          game == 'Matatu/Cards') {
+        await _generateKnockoutFixtures(
+            batch, fixturesCollection, tournamentId, game, tournament.courses);
       } else {
-        await _generateLeagueFixtures(batch, fixturesCollection, tournamentId, game, tournament.courses);
+        await _generateLeagueFixtures(
+            batch, fixturesCollection, tournamentId, game, tournament.courses);
       }
     }
 
@@ -128,16 +139,18 @@ class TournamentService {
       for (final away in courses) {
         if (home == away) continue;
         final docRef = fixturesCollection.doc();
-        batch.set(docRef, TournamentFixture(
-          id: docRef.id,
-          tournamentId: tournamentId,
-          game: game,
-          round: (fixtureIndex ~/ courses.length) + 1,
-          stage: 'Round ',
-          date: dates[fixtureIndex % dates.length],
-          homeCourse: home,
-          awayCourse: away,
-        ).toMap());
+        batch.set(
+            docRef,
+            TournamentFixture(
+              id: docRef.id,
+              tournamentId: tournamentId,
+              game: game,
+              round: (fixtureIndex ~/ courses.length) + 1,
+              stage: 'Round ',
+              date: dates[fixtureIndex % dates.length],
+              homeCourse: home,
+              awayCourse: away,
+            ).toMap());
         fixtureIndex++;
       }
     }
@@ -161,58 +174,66 @@ class TournamentService {
       for (int i = 0; i < group.length; i++) {
         for (int j = i + 1; j < group.length; j++) {
           final docRef = fixturesCollection.doc();
-          batch.set(docRef, TournamentFixture(
-            id: docRef.id,
-            tournamentId: tournamentId,
-            game: game,
-            round: fixtureIndex + 1,
-            stage: groupLabel,
-            date: dates[fixtureIndex % dates.length],
-            homeCourse: group[i],
-            awayCourse: group[j],
-          ).toMap());
+          batch.set(
+              docRef,
+              TournamentFixture(
+                id: docRef.id,
+                tournamentId: tournamentId,
+                game: game,
+                round: fixtureIndex + 1,
+                stage: groupLabel,
+                date: dates[fixtureIndex % dates.length],
+                homeCourse: group[i],
+                awayCourse: group[j],
+              ).toMap());
           fixtureIndex++;
         }
       }
     }
 
     final semi1 = fixturesCollection.doc();
-    batch.set(semi1, TournamentFixture(
-      id: semi1.id,
-      tournamentId: tournamentId,
-      game: game,
-      round: fixtureIndex + 1,
-      stage: 'Semi-Final 1',
-      date: dates[fixtureIndex % dates.length],
-      homeCourse: 'Group A Winner',
-      awayCourse: 'Group B Runner-up',
-    ).toMap());
+    batch.set(
+        semi1,
+        TournamentFixture(
+          id: semi1.id,
+          tournamentId: tournamentId,
+          game: game,
+          round: fixtureIndex + 1,
+          stage: 'Semi-Final 1',
+          date: dates[fixtureIndex % dates.length],
+          homeCourse: 'Group A Winner',
+          awayCourse: 'Group B Runner-up',
+        ).toMap());
     fixtureIndex++;
 
     final semi2 = fixturesCollection.doc();
-    batch.set(semi2, TournamentFixture(
-      id: semi2.id,
-      tournamentId: tournamentId,
-      game: game,
-      round: fixtureIndex + 1,
-      stage: 'Semi-Final 2',
-      date: dates[fixtureIndex % dates.length],
-      homeCourse: 'Group B Winner',
-      awayCourse: 'Group A Runner-up',
-    ).toMap());
+    batch.set(
+        semi2,
+        TournamentFixture(
+          id: semi2.id,
+          tournamentId: tournamentId,
+          game: game,
+          round: fixtureIndex + 1,
+          stage: 'Semi-Final 2',
+          date: dates[fixtureIndex % dates.length],
+          homeCourse: 'Group B Winner',
+          awayCourse: 'Group A Runner-up',
+        ).toMap());
     fixtureIndex++;
 
     final finalMatch = fixturesCollection.doc();
-    batch.set(finalMatch, TournamentFixture(
-      id: finalMatch.id,
-      tournamentId: tournamentId,
-      game: game,
-      round: fixtureIndex + 1,
-      stage: 'Final',
-      date: dates[fixtureIndex % dates.length],
-      homeCourse: 'Semi-Final 1 Winner',
-      awayCourse: 'Semi-Final 2 Winner',
-    ).toMap());
+    batch.set(
+        finalMatch,
+        TournamentFixture(
+          id: finalMatch.id,
+          tournamentId: tournamentId,
+          game: game,
+          round: fixtureIndex + 1,
+          stage: 'Final',
+          date: dates[fixtureIndex % dates.length],
+          homeCourse: 'Semi-Final 1 Winner',
+          awayCourse: 'Semi-Final 2 Winner',
+        ).toMap());
   }
 
   List<DateTime> _getMatchDates() {
@@ -220,7 +241,8 @@ class TournamentService {
     var current = DateTime(2026, 8, 19);
     final end = DateTime(2026, 10, 30);
     while (current.isBefore(end)) {
-      if (current.weekday == DateTime.wednesday || current.weekday == DateTime.friday) {
+      if (current.weekday == DateTime.wednesday ||
+          current.weekday == DateTime.friday) {
         dates.add(current);
       }
       current = current.add(const Duration(days: 1));
@@ -246,7 +268,8 @@ class TournamentService {
   CollectionReference<Map<String, dynamic>> _fixtures(String tournamentId) =>
       _tournaments.doc(tournamentId).collection('fixtures');
 
-  Stream<List<TournamentFixture>> getFixturesByGame(String tournamentId, String game) {
+  Stream<List<TournamentFixture>> getFixturesByGame(
+      String tournamentId, String game) {
     return _fixtures(tournamentId)
         .where('game', isEqualTo: game)
         .orderBy('date')
@@ -274,19 +297,22 @@ class TournamentService {
   CollectionReference<Map<String, dynamic>> _points(String tournamentId) =>
       _tournaments.doc(tournamentId).collection('points');
 
-  Future<void> _initializePoints(String tournamentId, TournamentModel tournament) async {
+  Future<void> _initializePoints(
+      String tournamentId, TournamentModel tournament) async {
     final batch = _db.batch();
     for (final course in tournament.courses) {
       final docRef = _points(tournamentId).doc(course);
-      batch.set(docRef, TournamentPoints(
-        id: docRef.id,
-        tournamentId: tournamentId,
-        course: course,
-        gamePoints: {for (final g in tournament.games) g: 0},
-        spiritPoints: 0,
-        totalPoints: 0,
-        rank: 0,
-      ).toMap());
+      batch.set(
+          docRef,
+          TournamentPoints(
+            id: docRef.id,
+            tournamentId: tournamentId,
+            course: course,
+            gamePoints: {for (final g in tournament.games) g: 0},
+            spiritPoints: 0,
+            totalPoints: 0,
+            rank: 0,
+          ).toMap());
     }
     await batch.commit();
   }
@@ -294,7 +320,8 @@ class TournamentService {
   Future<void> _recalculatePoints(String tournamentId) async {
     final tournamentDoc = await _tournaments.doc(tournamentId).get();
     if (!tournamentDoc.exists) return;
-    final tournament = TournamentModel.fromMap(tournamentDoc.data()!, tournamentId);
+    final tournament =
+        TournamentModel.fromMap(tournamentDoc.data()!, tournamentId);
 
     final fixturesSnapshot = await _fixtures(tournamentId).get();
     final pointsMap = <String, Map<String, int>>{};
@@ -304,16 +331,19 @@ class TournamentService {
 
     for (final doc in fixturesSnapshot.docs) {
       final fixture = TournamentFixture.fromMap(doc.data(), doc.id);
-      if (fixture.result == null || fixture.homePts == 0 && fixture.awayPts == 0) continue;
+      if (fixture.result == null ||
+          fixture.homePts == 0 && fixture.awayPts == 0) continue;
 
       final homeEntry = pointsMap[fixture.homeCourse];
       final awayEntry = pointsMap[fixture.awayCourse];
 
       if (homeEntry != null) {
-        homeEntry[fixture.game] = (homeEntry[fixture.game] ?? 0) + fixture.homePts;
+        homeEntry[fixture.game] =
+            (homeEntry[fixture.game] ?? 0) + fixture.homePts;
       }
       if (awayEntry != null) {
-        awayEntry[fixture.game] = (awayEntry[fixture.game] ?? 0) + fixture.awayPts;
+        awayEntry[fixture.game] =
+            (awayEntry[fixture.game] ?? 0) + fixture.awayPts;
       }
     }
 
@@ -338,10 +368,8 @@ class TournamentService {
   }
 
   Stream<List<TournamentPoints>> getPointsTable(String tournamentId) {
-    return _points(tournamentId)
-        .orderBy('rank')
-        .snapshots()
-        .map((snapshot) => snapshot.docs
+    return _points(tournamentId).orderBy('rank').snapshots().map((snapshot) =>
+        snapshot.docs
             .map((doc) => TournamentPoints.fromMap(doc.data(), doc.id))
             .toList());
   }
@@ -364,10 +392,11 @@ class TournamentService {
     await batch.commit();
   }
 
-  Future<void> notifyMatchDay(String tournamentId, String game, DateTime date) async {
+  Future<void> notifyMatchDay(
+      String tournamentId, String game, DateTime date) async {
     final usersSnapshot = await _db.collection('users').get();
     final batch = _db.batch();
-    final dateStr = '//';
+    const dateStr = '//';
     for (final userDoc in usersSnapshot.docs) {
       final notifRef = _db.collection('notifications').doc();
       batch.set(notifRef, {

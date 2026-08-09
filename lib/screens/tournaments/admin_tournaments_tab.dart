@@ -1,6 +1,5 @@
 // lib/screens/tournaments/admin_tournaments_tab.dart
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/tournament_model.dart';
 import '../../services/tournament_service.dart';
@@ -124,11 +123,13 @@ class _AdminTournamentsTabState extends State<AdminTournamentsTab>
                     onViewFixtures: () => _viewFixtures(tournament),
                     onViewPoints: () => _viewPoints(tournament),
                     onUpdateStatus: (status) {
-                      final tournamentStatus = TournamentStatus.values.firstWhere(
+                      final tournamentStatus =
+                          TournamentStatus.values.firstWhere(
                         (e) => e.name == status,
                         orElse: () => TournamentStatus.upcoming,
                       );
-                      _tournamentService.updateTournamentStatus(tournament.id, tournamentStatus);
+                      _tournamentService.updateTournamentStatus(
+                          tournament.id, tournamentStatus);
                     },
                   );
                 },
