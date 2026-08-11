@@ -85,9 +85,11 @@ class _SplashScreenState extends State<SplashScreen>
 
         if (userDoc.exists) {
           Map<String, dynamic> data = userDoc.data() as Map<String, dynamic>;
-          print('STEP 5: isVerified = ${data['isVerified']}');
+          final firebaseVerified = currentUser.emailVerified == true;
+          final firestoreVerified = data['isVerified'] == true;
+          final isVerified = firebaseVerified || firestoreVerified;
 
-          if (data['isVerified'] == true) {
+          if (isVerified) {
             Navigator.pushReplacementNamed(context, '/home');
           } else {
             Navigator.pushReplacementNamed(

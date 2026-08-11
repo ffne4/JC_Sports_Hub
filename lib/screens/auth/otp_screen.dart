@@ -431,30 +431,23 @@ class _OtpScreenState extends State<OtpScreen> {
   // Builds a single OTP digit input box
   Widget _buildOtpBox(int index) {
     return SizedBox(
-      width: 48,
-      height: 56,
-      child: TextFormField(
+      width: 52,
+      height: 60,
+      child: TextField(
         controller: _controllers[index],
         focusNode: _focusNodes[index],
         textAlign: TextAlign.center,
-        // keyboardType.number shows numeric keyboard on phone
         keyboardType: TextInputType.number,
-        // maxLength limits input to 1 character
-        maxLength: 1,
         style: const TextStyle(
           fontSize: AppSizes.fontXL,
           fontWeight: FontWeight.bold,
-          color: AppColors.dark,
+          color: Colors.black,
         ),
-        // inputFormatters restrict what can be typed
         inputFormatters: [
-          // FilteringTextInputFormatter.digitsOnly allows only 0-9
           FilteringTextInputFormatter.digitsOnly,
         ],
         onChanged: (value) => _onOtpChanged(value, index),
         decoration: InputDecoration(
-          // counterText: '' hides the character counter that maxLength shows
-          counterText: '',
           filled: true,
           fillColor: Colors.white,
           border: OutlineInputBorder(
@@ -467,7 +460,6 @@ class _OtpScreenState extends State<OtpScreen> {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
-            // Active box gets a green border
             borderSide: const BorderSide(color: AppColors.primary, width: 2),
           ),
         ),

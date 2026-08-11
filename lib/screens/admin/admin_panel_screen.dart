@@ -8,6 +8,7 @@ import '../../services/post_service.dart';
 import '../../services/match_service.dart';
 import '../../services/wallet_service.dart';
 import '../../utils/constants.dart';
+import '../tournaments/admin_tournaments_tab.dart';
 
 class AdminPanelScreen extends StatefulWidget {
   const AdminPanelScreen({super.key});
@@ -26,7 +27,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
   }
 
   @override
@@ -61,6 +62,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
             Tab(text: 'Suggestions'),
             Tab(text: 'Matches'),
             Tab(text: 'Wallet'),
+            Tab(text: 'Tournaments'),
           ],
         ),
         actions: [
@@ -78,6 +80,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
           _buildSuggestionsTab(),
           _MatchesTabWidget(adminId: _adminId),
           _buildWalletTab(),
+          const AdminTournamentsTab(),
         ],
       ),
     );
@@ -808,8 +811,7 @@ class _WithdrawalCard extends StatelessWidget {
           ]),
         ),
         const SizedBox(height: 4),
-        Text(
-            'Requested: ${_fmt(tx.amount)} UGX | Fee: ${_fmt(tx.fee)} UGX',
+        Text('Requested: ${_fmt(tx.amount)} UGX | Fee: ${_fmt(tx.fee)} UGX',
             style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
         const SizedBox(height: 12),
         Row(children: [
@@ -1587,8 +1589,7 @@ class _MatchAdminCardState extends State<_MatchAdminCard> {
                                 style: TextStyle(
                                     color: Colors.grey.shade500, fontSize: 11)),
                             Text(
-                                'Wins: ${_fmt(
-                                        bet['potentialWinnings'] as int? ?? 0)} UGX',
+                                'Wins: ${_fmt(bet['potentialWinnings'] as int? ?? 0)} UGX',
                                 style: TextStyle(
                                     color: isTeamA
                                         ? AppColors.primary

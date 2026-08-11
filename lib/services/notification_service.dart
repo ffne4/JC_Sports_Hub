@@ -33,11 +33,14 @@ class NotificationService {
 
     return _col
         .where('userId', isEqualTo: _userId)
-        .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => NotificationModel.fromMap(doc.data(), doc.id))
-            .toList());
+        .map((snapshot) {
+      final notifications = snapshot.docs
+          .map((doc) => NotificationModel.fromMap(doc.data(), doc.id))
+          .toList();
+      notifications.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return notifications;
+    });
   }
 
   Future<int> getUnreadCount() async {

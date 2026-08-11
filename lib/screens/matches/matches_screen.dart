@@ -292,8 +292,8 @@ class _MatchesScreenState extends State<MatchesScreen>
           const SizedBox(height: 12),
 
           // COMPLETED MATCH - show winner
-          if (match.status == MatchStatus.completed ||
-              match.status == 'cancelled') ...[
+              if (match.status == MatchStatus.completed ||
+                  match.status == MatchStatus.cancelled) ...[
             const Divider(height: 1),
             Padding(
               padding: const EdgeInsets.all(12),
@@ -318,20 +318,18 @@ class _MatchesScreenState extends State<MatchesScreen>
                                   style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       color: Colors.green)),
-                              if (match.userVotes.containsKey(_currentUserId))
-                                Text(
-                                  match.userVotes[_currentUserId] ==
-                                          (match.bets.isNotEmpty
-                                              ? 'winnerTeam'
-                                              : '')
-                                      ? 'You won! Check your wallet.'
-                                      : userBet != null
-                                          ? 'Bet: ${_fmtAmt(userBet['amount'] as int? ?? 0)} UGX | Odds: ${(userBet['oddsAtPlacement'] ?? 1.5).toStringAsFixed(2)}x'
-                                          : '',
-                                  style: TextStyle(
-                                      color: Colors.grey.shade600,
-                                      fontSize: 11),
-                                ),
+                                   if (match.userVotes.containsKey(_currentUserId))
+                                     Text(
+                                       (match.scoreA > match.scoreB && match.userVotes[_currentUserId] == 'A') ||
+                                           (match.scoreB > match.scoreA && match.userVotes[_currentUserId] == 'B')
+                                           ? 'You won! Check your wallet.'
+                                           : userBet != null
+                                               ? 'Bet: ${_fmtAmt(userBet['amount'] as int? ?? 0)} UGX | Odds: ${(userBet['oddsAtPlacement'] ?? 1.5).toStringAsFixed(2)}x'
+                                               : '',
+                                       style: TextStyle(
+                                           color: Colors.grey.shade600,
+                                           fontSize: 11),
+                                     ),
                             ]),
                       ),
                     ]),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../utils/constants.dart';
 import '../../services/notification_service.dart';
 import 'home_feed_screen.dart';
@@ -49,9 +50,10 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
 
   final User? _currentUser = FirebaseAuth.instance.currentUser;
-  final String _userInitial = (FirebaseAuth.instance.currentUser?.displayName ?? 'U').isNotEmpty
-      ? FirebaseAuth.instance.currentUser!.displayName![0].toUpperCase()
-      : 'U';
+  final String _userInitial =
+      (FirebaseAuth.instance.currentUser?.displayName?.isNotEmpty == true)
+          ? FirebaseAuth.instance.currentUser!.displayName![0].toUpperCase()
+          : 'U';
 
   final NotificationService _notificationService = NotificationService();
 
@@ -59,6 +61,36 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadUnreadCount();
+    _checkVerification();
+  }
+
+  Future<void> _checkVerification() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        final isVerified = data['isVerified'] == true || user.emailVerified == true;
+        if (!isVerified && mounted) {
+          Navigator.pushReplacementNamed(
+            context,
+            '/verify-otp',
+            arguments: {
+              'userId': user.uid,
+              'email': data['email'] ?? user.email ?? '',
+              'name': data['fullName'] ?? '',
+            },
+          );
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
   }
 
   Future<void> _loadUnreadCount() async {
@@ -277,16 +309,20 @@ class _HomeScreenState extends State<HomeScreen> {
                       onTap: () async {
                         await FirebaseAuth.instance.signOut();
                         if (mounted) {
-                          Navigator.pushReplacementNamed(context, '/onboarding');
+                          Navigator.pushReplacementNamed(
+                              context, '/onboarding');
                         }
                       },
                       child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 16, horizontal: 20),
                         child: const Row(
                           children: [
                             Icon(Icons.logout, color: Colors.white70, size: 20),
                             SizedBox(width: 16),
-                            Text('Logout', style: TextStyle(color: Colors.white70, fontSize: 15)),
+                            Text('Logout',
+                                style: TextStyle(
+                                    color: Colors.white70, fontSize: 15)),
                           ],
                         ),
                       ),
@@ -398,42 +434,33 @@ class _HomeScreenState extends State<HomeScreen> {
                     Navigator.pop(context);
                   },
                 ),
-                    _buildSidebarItem(
-                      icon: Icons.person,
-                      label: 'Profile',
-                      isSelected: _selectedIndex == 5,
-                      onTap: () {
-                        _onItemTapped(5);
-                        Navigator.pop(context);
-                      },
-                    ),
-                    _buildSidebarItem(
-                      icon: Icons.emoji_events,
-                      label: 'Tournaments',
-                      isSelected: _selectedIndex == 6,
-                      onTap: () {
-                        _onItemTapped(6);
-                        Navigator.pop(context);
-                      },
-                    ),
-                    _buildSidebarItem(
-                      icon: Icons.receipt_long,
-                      label: 'My Bets',
-                      isSelected: _selectedIndex == 7,
-                      onTap: () {
-                        _onItemTapped(7);
-                        Navigator.pop(context);
-                      },
-                    ),
-                    _buildSidebarItem(
-                      icon: Icons.emoji_events,
-                      label: 'Tournaments',
-                      isSelected: _selectedIndex == 6,
-                      onTap: () {
-                        _onItemTapped(6);
-                        Navigator.pop(context);
-                      },
-                    ),
+                _buildSidebarItem(
+                  icon: Icons.person,
+                  label: 'Profile',
+                  isSelected: _selectedIndex == 5,
+                  onTap: () {
+                    _onItemTapped(5);
+                    Navigator.pop(context);
+                  },
+                ),
+                _buildSidebarItem(
+                  icon: Icons.emoji_events,
+                  label: 'Tournaments',
+                  isSelected: _selectedIndex == 6,
+                  onTap: () {
+                    _onItemTapped(6);
+                    Navigator.pop(context);
+                  },
+                ),
+                _buildSidebarItem(
+                  icon: Icons.receipt_long,
+                  label: 'My Bets',
+                  isSelected: _selectedIndex == 7,
+                  onTap: () {
+                    _onItemTapped(7);
+                    Navigator.pop(context);
+                  },
+                ),
                 const Divider(),
                 InkWell(
                   onTap: () async {
@@ -444,12 +471,15 @@ class _HomeScreenState extends State<HomeScreen> {
                     }
                   },
                   child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 16, horizontal: 20),
                     child: const Row(
                       children: [
                         Icon(Icons.logout, color: Colors.white70, size: 20),
                         SizedBox(width: 16),
-                        Text('Logout', style: TextStyle(color: Colors.white70, fontSize: 15)),
+                        Text('Logout',
+                            style:
+                                TextStyle(color: Colors.white70, fontSize: 15)),
                       ],
                     ),
                   ),

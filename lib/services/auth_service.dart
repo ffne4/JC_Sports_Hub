@@ -100,10 +100,25 @@ class AuthService {
             await _firestore.collection('users').doc(user.uid).get();
 
         if (userDoc.exists) {
+          Map<String, dynamic> data = userDoc.data() as Map<String, dynamic>;
+          final isVerified = data['isVerified'] == true;
+
+          if (!isVerified) {
+            await _auth.signOut();
+            return {
+              'success': false,
+              'needVerification': true,
+              'userId': user.uid,
+              'email': data['email'] ?? email,
+              'name': data['fullName'] ?? '',
+              'message': 'Please verify your email before logging in.',
+            };
+          }
+
           return {
             'success': true,
             'message': 'Login successful',
-            'userData': userDoc.data(),
+            'userData': data,
           };
         }
       }

@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/tournament_model.dart';
 import '../../services/tournament_service.dart';
 import '../../utils/constants.dart';
+import 'tournament_fairness_view.dart';
 
 class TournamentsScreen extends StatefulWidget {
   const TournamentsScreen({super.key});
@@ -17,16 +18,15 @@ class _TournamentsScreenState extends State<TournamentsScreen>
     with SingleTickerProviderStateMixin {
   final TournamentService _tournamentService = TournamentService();
   late TabController _tabController;
-  String? _currentTournamentId;
   TournamentModel? _currentTournament;
   bool _isLoading = true;
-  String? _selectedCourse;
+  String? _selectedTribe;
   String? _selectedGame;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _loadCurrentTournament();
   }
 
@@ -41,7 +41,6 @@ class _TournamentsScreenState extends State<TournamentsScreen>
     if (mounted) {
       setState(() {
         _currentTournament = tournament;
-        _currentTournamentId = tournament?.id;
         _isLoading = false;
       });
     }
@@ -68,7 +67,9 @@ class _TournamentsScreenState extends State<TournamentsScreen>
 
     final tournament = _currentTournament!;
     final user = FirebaseAuth.instance.currentUser;
-    final isGuest = user == null;
+    if (user == null) {
+      return _buildGuestPrompt();
+    }
 
     return Scaffold(
       body: NestedScrollView(
@@ -90,6 +91,7 @@ class _TournamentsScreenState extends State<TournamentsScreen>
                     ),
                   ),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
@@ -106,29 +108,36 @@ class _TournamentsScreenState extends State<TournamentsScreen>
                               ),
                             ),
                           ),
+                          _buildStatusChip(tournament.status),
                         ],
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Season: ${tournament.season}',
+                        'Season ${tournament.season}',
                         style: const TextStyle(
                             color: Colors.white70, fontSize: 14),
                       ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'Inter-tribe league: ${tournament.tribes.length} tribes, ${tournament.games.length} games, 6 match-days.',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          height: 1.4,
+                        ),
+                      ),
                       const SizedBox(height: 12),
-                      Row(
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
                         children: [
-                          Expanded(
-                            child: _buildInfoChip(
-                              Icons.calendar_today,
-                              'Reg: ${tournament.registrationOpen.day}/${tournament.registrationOpen.month} - ${tournament.registrationClose.day}/${tournament.registrationClose.month}',
-                            ),
+                          _buildInfoChip(
+                            Icons.calendar_today,
+                            'Reg: ${_formatShortDate(tournament.registrationOpen)} - ${_formatShortDate(tournament.registrationClose)}',
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: _buildInfoChip(
-                              Icons.sports_soccer,
-                              'League: ${tournament.leagueStart.day}/${tournament.leagueStart.month} - ${tournament.leagueEnd.day}/${tournament.leagueEnd.month}',
-                            ),
+                          _buildInfoChip(
+                            Icons.sports_soccer,
+                            'League: ${_formatShortDate(tournament.leagueStart)} - ${_formatShortDate(tournament.leagueEnd)}',
                           ),
                         ],
                       ),
@@ -145,6 +154,7 @@ class _TournamentsScreenState extends State<TournamentsScreen>
                     Tab(text: 'Fixtures'),
                     Tab(text: 'Register'),
                     Tab(text: 'Standings'),
+                    Tab(text: 'Fairness'),
                   ],
                 ),
               ],
@@ -155,8 +165,9 @@ class _TournamentsScreenState extends State<TournamentsScreen>
           controller: _tabController,
           children: [
             _buildFixturesTab(tournament),
-            isGuest ? _buildGuestPrompt() : _buildRegistrationTab(tournament),
+            _buildRegistrationTab(tournament),
             _buildStandingsTab(tournament),
+            TournamentFairnessView(tournamentId: tournament.id),
           ],
         ),
       ),
@@ -167,7 +178,7 @@ class _TournamentsScreenState extends State<TournamentsScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
+        color: Colors.white.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -187,110 +198,133 @@ class _TournamentsScreenState extends State<TournamentsScreen>
 
   Widget _buildFixturesTab(TournamentModel tournament) {
     final service = TournamentService();
-    return DefaultTabController(
-      length: tournament.games.length,
-      child: Column(
-        children: [
-          TabBar(
-            isScrollable: true,
-            indicatorColor: AppColors.primary,
-            labelColor: AppColors.primary,
-            unselectedLabelColor: Colors.grey,
-            tabs: tournament.games
-                .map((game) => Tab(
-                      text: game,
-                      icon: Icon(_getGameIcon(game), size: 18),
-                    ))
-                .toList(),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.all(16),
+          child: Text(
+            'MATCH SCHEDULE — 19 AUG 2026 TO 11 NOV 2026 (WED & FRI ONLY)',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
           ),
-          Expanded(
-            child: TabBarView(
-              children: tournament.games.map((game) {
-                return StreamBuilder<List<TournamentFixture>>(
-                  stream: service.getFixturesByGame(tournament.id, game),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(
-                        child:
-                            CircularProgressIndicator(color: AppColors.primary),
-                      );
-                    }
-                    final fixtures = snapshot.data ?? [];
-                    if (fixtures.isEmpty) {
-                      return Center(
-                        child: Text(
-                          'No fixtures for $game yet',
-                          style: TextStyle(color: Colors.grey.shade400),
-                        ),
-                      );
-                    }
-                    return ListView.builder(
-                      padding: const EdgeInsets.all(12),
-                      itemCount: fixtures.length,
-                      itemBuilder: (context, index) {
-                        final fixture = fixtures[index];
-                        final isPast = fixture.date.isBefore(DateTime.now());
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          child: ListTile(
-                            leading: Icon(
-                              _getGameIcon(game),
-                              color: isPast ? Colors.grey : AppColors.primary,
-                            ),
-                            title: Text(
-                              '${fixture.homeCourse} vs ${fixture.awayCourse}',
-                              style: TextStyle(
-                                fontWeight: isPast
-                                    ? FontWeight.normal
-                                    : FontWeight.bold,
-                              ),
-                            ),
-                            subtitle: Column(
+        ),
+        Expanded(
+          child: StreamBuilder<List<TournamentFixture>>(
+            stream: service.getAllFixtures(tournament.id),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(
+                  child:
+                      CircularProgressIndicator(color: AppColors.primary),
+                );
+              }
+              final fixtures = snapshot.data ?? [];
+              if (fixtures.isEmpty) {
+                return const Center(
+                  child: Text('No fixtures loaded'),
+                );
+              }
+
+              final grouped = <String, List<TournamentFixture>>{};
+              final monthAbbr = const ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+              for (final f in fixtures) {
+                final dateKey =
+                    '${f.date.day.toString().padLeft(2, '0')}-${monthAbbr[f.date.month - 1]}-${f.date.year}';
+                final dayName = [
+                  'Monday',
+                  'Tuesday',
+                  'Wednesday',
+                  'Thursday',
+                  'Friday',
+                  'Saturday',
+                  'Sunday'
+                ][f.date.weekday - 1];
+                final key = '$dateKey|$dayName|${f.game}';
+                grouped.putIfAbsent(key, () => []).add(f);
+              }
+
+              final rows = grouped.entries.toList();
+              rows.sort((a, b) {
+                final dateA = a.key.split('|').first;
+                final dateB = b.key.split('|').first;
+                return dateA.compareTo(dateB);
+              });
+
+              return ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                itemCount: rows.length,
+                itemBuilder: (context, index) {
+                  final entry = rows[index];
+                  final parts = entry.key.split('|');
+                  final dateStr = parts[0];
+                  final dayStr = parts[1];
+                  final game = parts[2];
+                  final gameFixtures = entry.value;
+                  final match1 =
+                      gameFixtures[0].homeClan + ' vs ' + gameFixtures[0].awayClan;
+                  final match2 = gameFixtures.length > 1
+                      ? gameFixtures[1].homeClan +
+                          ' vs ' +
+                          gameFixtures[1].awayClan
+                      : '';
+                  final timeLabel = gameFixtures[0].category == GameCategory.mindGame
+                      ? '3:00 PM (both simultaneous)'
+                      : '${timeSlotLabel(FixtureTimeSlot.slot1_4pm)}  /  ${timeSlotLabel(FixtureTimeSlot.slot2_5pm)}';
+
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  '${fixture.date.day}/${fixture.date.month}/${fixture.date.year} • ${fixture.stage ?? ''}',
-                                ),
-                                if (fixture.result != null)
-                                  Text(
-                                    'Result: ${fixture.result}',
-                                    style: const TextStyle(
-                                      color: AppColors.primary,
-                                      fontWeight: FontWeight.w500,
-                                    ),
+                                  '$dateStr,$dayStr,$game,$timeLabel',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 12,
                                   ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(match1),
+                                if (match2.isNotEmpty) Text(match2),
                               ],
                             ),
-                            trailing: fixture.result != null
-                                ? Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.primary.withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      '${fixture.homePts} - ${fixture.awayPts}',
-                                      style: const TextStyle(
-                                        color: AppColors.primary,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  )
-                                : null,
                           ),
-                        );
-                      },
-                    );
-                  },
-                );
-              }).toList(),
-            ),
+                          if (gameFixtures[0].result != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary
+                                    .withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '${gameFixtures[0].homePts} - ${gameFixtures[0].awayPts}',
+                                style: const TextStyle(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -324,7 +358,10 @@ class _TournamentsScreenState extends State<TournamentsScreen>
   }
 
   Widget _buildRegistrationTab(TournamentModel tournament) {
-    if (_selectedCourse == null || _selectedGame == null) {
+    final selectedTribe = _selectedTribe;
+    final selectedGame = _selectedGame;
+
+    if (selectedTribe == null || selectedGame == null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -334,7 +371,7 @@ class _TournamentsScreenState extends State<TournamentsScreen>
                   size: 64, color: Colors.grey.shade300),
               const SizedBox(height: 16),
               Text(
-                'Select course and game to register',
+                'Select tribe and game to register',
                 style: TextStyle(
                   fontSize: AppSizes.fontLarge,
                   color: Colors.grey.shade400,
@@ -363,10 +400,17 @@ class _TournamentsScreenState extends State<TournamentsScreen>
                   style: TextStyle(color: Colors.red)));
         }
 
-        final userData = (snapshot.data!.data() as Map<String, dynamic>) ?? {};
+        final data = snapshot.data?.data();
+        final userData =
+            (data is Map<String, dynamic>) ? data : <String, dynamic>{};
         final studentName =
             userData['fullName'] ?? user.displayName ?? 'Student';
         final studentNumber = userData['regNumber'] ?? '';
+
+        final isRegistrationOpen = _isRegistrationOpen(
+          tournament.registrationOpen,
+          tournament.registrationClose,
+        );
 
         return Padding(
           padding: const EdgeInsets.all(16),
@@ -376,22 +420,49 @@ class _TournamentsScreenState extends State<TournamentsScreen>
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.08),
+                  color: AppColors.primary.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                  border: Border.all(
+                      color: AppColors.primary.withValues(alpha: 0.3)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Row(
+                      children: [
+                        Icon(
+                          isRegistrationOpen
+                              ? Icons.lock_open_rounded
+                              : Icons.lock_outline,
+                          color: isRegistrationOpen
+                              ? Colors.green.shade700
+                              : AppColors.error,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            isRegistrationOpen
+                                ? 'Registration is open now'
+                                : 'Registration window is closed',
+                            style: const TextStyle(
+                              fontSize: AppSizes.fontMedium,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.dark,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
                     Text(
-                      '$_selectedCourse • $_selectedGame',
+                      '$_selectedTribe • $_selectedGame',
                       style: const TextStyle(
                         fontSize: AppSizes.fontMedium,
                         fontWeight: FontWeight.bold,
                         color: AppColors.dark,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     Text(
                       'Student: $studentName',
                       style:
@@ -408,21 +479,21 @@ class _TournamentsScreenState extends State<TournamentsScreen>
               ),
               const SizedBox(height: 20),
               const Text(
-                'Select Course',
+                'Select Tribe',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
-                children: tournament.courses.map((course) {
-                  final isSelected = _selectedCourse == course;
+                children: tournament.tribes.map((tribe) {
+                  final isSelected = _selectedTribe == tribe;
                   return ChoiceChip(
-                    label: Text(course),
+                    label: Text(tribe),
                     selected: isSelected,
                     onSelected: (selected) {
                       if (selected) {
                         setState(() {
-                          _selectedCourse = course;
+                          _selectedTribe = tribe;
                           _selectedGame = null;
                         });
                       }
@@ -445,7 +516,9 @@ class _TournamentsScreenState extends State<TournamentsScreen>
                     selected: isSelected,
                     onSelected: (selected) {
                       if (selected) {
-                        setState(() => _selectedGame = game);
+                        setState(() {
+                          _selectedGame = game;
+                        });
                       }
                     },
                   );
@@ -454,44 +527,45 @@ class _TournamentsScreenState extends State<TournamentsScreen>
               const SizedBox(height: 24),
               FutureBuilder<bool>(
                 future: _isAlreadyRegistered(
-                    tournament.id, _selectedCourse!, _selectedGame!),
+                    tournament.id, selectedTribe, selectedGame),
                 builder: (context, snapshot) {
                   final isRegistered = snapshot.data ?? false;
                   return SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: isRegistered
+                      onPressed: isRegistered || !isRegistrationOpen
                           ? null
                           : () async {
-                              if (_selectedCourse == null ||
-                                  _selectedGame == null) return;
                               final success =
                                   await _tournamentService.registerStudent(
                                 tournamentId: tournament.id,
-                                course: _selectedCourse!,
-                                game: _selectedGame!,
+                                tribe: selectedTribe,
+                                game: selectedGame,
                                 studentName: studentName,
                                 studentNumber: studentNumber,
                               );
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(success
-                                        ? 'Registered successfully'
-                                        : 'Already registered for this course+game'),
-                                    backgroundColor: success
-                                        ? Colors.green
-                                        : AppColors.error,
-                                  ),
-                                );
-                              }
+                              if (!mounted || !context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(success
+                                      ? 'Registered successfully'
+                                      : 'Already registered for this tribe+game'),
+                                  backgroundColor:
+                                      success ? Colors.green : AppColors.error,
+                                ),
+                              );
+                              setState(() {});
                             },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                       child: Text(
-                        isRegistered ? 'Already Registered' : 'Register Now',
+                        isRegistered
+                            ? 'Already Registered'
+                            : isRegistrationOpen
+                                ? 'Register Now'
+                                : 'Registration Closed',
                         style:
                             const TextStyle(color: Colors.white, fontSize: 16),
                       ),
@@ -507,10 +581,10 @@ class _TournamentsScreenState extends State<TournamentsScreen>
   }
 
   Future<bool> _isAlreadyRegistered(
-      String tournamentId, String course, String game) async {
+      String tournamentId, String tribe, String game) async {
     final registrations =
         await _tournamentService.getStudentRegistrations(tournamentId);
-    return registrations.any((r) => r.course == course && r.game == game);
+    return registrations.any((r) => r.tribe == tribe && r.game == game);
   }
 
   Widget _buildStandingsTab(TournamentModel tournament) {
@@ -532,117 +606,189 @@ class _TournamentsScreenState extends State<TournamentsScreen>
             ),
           );
         }
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: points.length,
-          itemBuilder: (context, index) {
-            final point = points[index];
-            final rankColor = point.rank == 1
-                ? Colors.amber[700]
-                : point.rank == 2
-                    ? Colors.grey[500]
-                    : point.rank == 3
-                        ? Colors.brown[500]
-                        : AppColors.primary;
-            return Card(
-              margin: const EdgeInsets.only(bottom: 10),
-              child: Padding(
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Container(
                 padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(14),
+                ),
                 child: Row(
                   children: [
-                    CircleAvatar(
-                      backgroundColor: rankColor ?? AppColors.primary,
+                    const Icon(Icons.emoji_events, color: AppColors.primary),
+                    const SizedBox(width: 8),
+                    const Expanded(
                       child: Text(
-                        '${point.rank}',
-                        style: const TextStyle(
-                            color: Colors.white, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            point.course,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: AppSizes.fontSmall,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 4,
-                            children: point.gamePoints.entries.map((entry) {
-                              return Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary.withOpacity(0.08),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  '${entry.key.split('/').first}: ${entry.value}',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [AppColors.primary, Color(0xFF2E7D32)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '${point.totalPoints} pts',
-                        style: const TextStyle(
-                          color: Colors.white,
+                        'Current leaderboard',
+                        style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          fontSize: 13,
+                          color: AppColors.dark,
                         ),
+                      ),
+                    ),
+                     Text(
+                      '${points.length} tribes',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 12,
                       ),
                     ),
                   ],
                 ),
               ),
-            );
-          },
+            ),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: points.length,
+                itemBuilder: (context, index) {
+                  final point = points[index];
+                  final rankColor = point.rank == 1
+                      ? Colors.amber[700]
+                      : point.rank == 2
+                          ? Colors.grey[500]
+                          : point.rank == 3
+                              ? Colors.brown[500]
+                              : AppColors.primary;
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            backgroundColor: rankColor ?? AppColors.primary,
+                            child: Text(
+                              '${point.rank}',
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                 Text(
+                                   point.tribe,
+                                   style: const TextStyle(
+                                     fontWeight: FontWeight.bold,
+                                     fontSize: AppSizes.fontSmall,
+                                   ),
+                                 ),
+                                const SizedBox(height: 4),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 4,
+                                  children:
+                                      point.gamePoints.entries.map((entry) {
+                                    return Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primary
+                                            .withValues(alpha: 0.08),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        '${entry.key.split('/').first}: ${entry.value}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [AppColors.primary, Color(0xFF2E7D32)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '${point.totalPoints} pts',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         );
       },
     );
   }
 
-  IconData _getGameIcon(String game) {
-    switch (game) {
-      case 'Football':
-        return Icons.sports_soccer;
-      case 'Netball':
-        return Icons.sports_basketball;
-      case 'Volleyball':
-        return Icons.sports_volleyball;
-      case 'Chess':
-        return Icons.public;
-      case 'Scrabble':
-        return Icons.text_fields;
-      case 'Ludo':
-        return Icons.casino;
-      case 'Matatu/Cards':
-        return Icons.directions_car;
-      default:
-        return Icons.sports;
+  Widget _buildStatusChip(TournamentStatus status) {
+    final color = status == TournamentStatus.ongoing
+        ? Colors.green.shade100
+        : status == TournamentStatus.completed
+            ? Colors.grey.shade200
+            : Colors.amber.shade100;
+    final textColor = status == TournamentStatus.ongoing
+        ? Colors.green.shade800
+        : status == TournamentStatus.completed
+            ? Colors.grey.shade800
+            : Colors.amber.shade900;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        _getStatusLabel(status),
+        style: TextStyle(
+          color: textColor,
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  String _getStatusLabel(TournamentStatus status) {
+    switch (status) {
+      case TournamentStatus.ongoing:
+        return 'LIVE';
+      case TournamentStatus.completed:
+        return 'DONE';
+      case TournamentStatus.upcoming:
+        return 'UPCOMING';
     }
+  }
+
+  bool _isRegistrationOpen(DateTime open, DateTime close) {
+    final now = DateTime.now();
+    return !now.isBefore(open) && !now.isAfter(close);
+  }
+
+  String _formatShortDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
   }
 }

@@ -13,24 +13,30 @@ class BetService {
     if (_currentUserId == null) return const Stream.empty();
     return _bets
         .where('userId', isEqualTo: _currentUserId)
-        .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => BetModel.fromFirestore(doc))
-            .toList());
+        .map((snapshot) {
+      final bets = snapshot.docs
+          .map((doc) => BetModel.fromFirestore(doc))
+          .toList();
+      bets.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return bets;
+    });
   }
 
   Stream<BetModel?> getRecentBet(String matchId) {
     if (_currentUserId == null) return const Stream.empty();
     return _bets
         .where('userId', isEqualTo: _currentUserId)
-        .where('matchId', isEqualTo: matchId)
-        .limit(1)
         .snapshots()
         .map((snapshot) {
-          if (snapshot.docs.isEmpty) return null;
-          return BetModel.fromFirestore(snapshot.docs.first);
-        });
+      final matches = snapshot.docs
+          .map((doc) => BetModel.fromFirestore(doc))
+          .where((bet) => bet.matchId == matchId)
+          .toList();
+      if (matches.isEmpty) return null;
+      matches.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return matches.first;
+    });
   }
 
   Future<Map<String, dynamic>> settleBet({

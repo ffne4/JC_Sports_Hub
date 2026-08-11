@@ -36,7 +36,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
 
     final bool isLive = match.status == MatchStatus.live;
     final bool isUpcoming = match.status == MatchStatus.upcoming;
-    final bool isCompleted = match.status == MatchStatus.completed || match.status == 'cancelled';
+    final bool isCompleted = match.status == MatchStatus.completed || match.status == MatchStatus.cancelled;
 
     return Scaffold(
       backgroundColor: AppColors.background,

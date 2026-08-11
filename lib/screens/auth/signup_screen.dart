@@ -370,15 +370,14 @@ class _SignupScreenState extends State<SignupScreen> {
           _buildTextField(
             controller: _regNumberController,
             label: 'Registration Number',
-            hint: 'e.g. UBT192-JJA/2024/T/D/A/',
+            hint: 'Enter your registration number',
             icon: Icons.badge,
             validator: (value) {
               if (value == null || value.trim().isEmpty) {
                 return 'Please enter your registration number';
               }
-              // Check it starts with UBT and contains JJA
               if (!value.trim().toUpperCase().contains('JJA')) {
-                return 'Must be a valid Jinja Campus reg number';
+                return 'Incorrect format';
               }
               return null;
             },

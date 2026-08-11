@@ -721,6 +721,16 @@ class _WalletScreenState extends State<WalletScreen>
                                   showInstructions = true;
                                 }
                               });
+                              if (!result['success'] && mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(result['message'] ??
+                                        'Failed to create deposit request'),
+                                    backgroundColor: AppColors.error,
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              }
                             },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
@@ -832,10 +842,12 @@ class _WalletScreenState extends State<WalletScreen>
                           ),
                         ),
 
+                        _instructionStep('6',
+                            'Copy the admin number below and send the money'),
                         _instructionStep(
-                            '6', 'Confirm payment with your MoMo PIN'),
+                            '7', 'Confirm payment with your MoMo PIN'),
                         _instructionStep(
-                            '7', 'Come back here and tap "I\'ve Paid" below'),
+                            '8', 'Come back here and tap "I\'ve Paid" below'),
 
                         const SizedBox(height: 8),
                         const Divider(),
@@ -847,11 +859,33 @@ class _WalletScreenState extends State<WalletScreen>
                             const Icon(Icons.person,
                                 size: 14, color: Colors.grey),
                             const SizedBox(width: 4),
-                            Text(
-                              'Sending to: ${WalletService.adminMomoName} (${WalletService.adminMomoNumber})',
-                              style: TextStyle(
-                                color: Colors.grey.shade600,
-                                fontSize: AppSizes.fontSmall,
+                            Expanded(
+                              child: Text(
+                                'Sending to: ${WalletService.adminMomoName} (${WalletService.adminMomoNumber})',
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontSize: AppSizes.fontSmall,
+                                ),
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: () {
+                                Clipboard.setData(const ClipboardData(
+                                    text: WalletService.adminMomoNumber));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Admin number copied!'),
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              },
+                              child: const Padding(
+                                padding: EdgeInsets.all(4.0),
+                                child: Icon(
+                                  Icons.copy,
+                                  color: Colors.grey,
+                                  size: 18,
+                                ),
                               ),
                             ),
                           ],

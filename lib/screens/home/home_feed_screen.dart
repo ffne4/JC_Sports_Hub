@@ -342,18 +342,28 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
 
           // IMAGE
           if (post.imageUrl.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: ClipRRect(
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(AppSizes.radiusMedium),
-                  bottomRight: Radius.circular(AppSizes.radiusMedium),
-                ),
-                child: Image.network(
-                  post.imageUrl,
-                  width: double.infinity,
-                  height: 200,
-                  fit: BoxFit.cover,
+            GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => _FullScreenImage(imageUrl: post.imageUrl),
+                  ),
+                );
+              },
+              child: Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(AppSizes.radiusMedium),
+                    bottomRight: Radius.circular(AppSizes.radiusMedium),
+                  ),
+                  child: Image.network(
+                    post.imageUrl,
+                    width: double.infinity,
+                    height: 200,
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
             ),
@@ -399,7 +409,6 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
 
                 const SizedBox(width: 8),
 
-                // COMMENT
                 // COMMENT
                 InkWell(
                   onTap: () {
@@ -553,5 +562,27 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
     if (difference.inHours < 24) return '${difference.inHours}h ago';
     if (difference.inDays == 1) return 'Yesterday';
     return '${date.day}/${date.month}/${date.year}';
+  }
+}
+
+class _FullScreenImage extends StatelessWidget {
+  final String imageUrl;
+
+  const _FullScreenImage({required this.imageUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: Center(
+        child: InteractiveViewer(
+          child: Image.network(imageUrl, fit: BoxFit.contain),
+        ),
+      ),
+    );
   }
 }

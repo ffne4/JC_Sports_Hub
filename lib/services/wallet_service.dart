@@ -180,10 +180,17 @@ class WalletService {
 
     try {
       final reference = _generateReference(userName);
-      final expiresAt =
-          DateTime.now().add(const Duration(minutes: depositReferenceExpiryMinutes));
+      final expiresAt = DateTime.now()
+          .add(const Duration(minutes: depositReferenceExpiryMinutes));
 
-      await _firestore.collection('transactions').add({
+      final txRef = _firestore.collection('transactions').doc();
+      final adminUsers = await _firestore
+          .collection('users')
+          .where('isAdmin', isEqualTo: true)
+          .get();
+
+      final batch = _firestore.batch();
+      batch.set(txRef, {
         'userId': userId,
         'userName': userName,
         'userMomoNumber': userMomoNumber,
@@ -201,6 +208,22 @@ class WalletService {
         'expiresAt': Timestamp.fromDate(expiresAt),
         'createdAt': FieldValue.serverTimestamp(),
       });
+
+      for (final admin in adminUsers.docs) {
+        final notifRef = _firestore.collection('notifications').doc();
+        batch.set(notifRef, {
+          'userId': admin.id,
+          'title': 'Deposit request',
+          'message':
+              '$userName requested a deposit of ${_fmt(amount)} UGX. Ref: $reference',
+          'type': 'admin',
+          'isRead': false,
+          'createdAt': FieldValue.serverTimestamp(),
+          'referenceId': txRef.id,
+        });
+      }
+
+      await batch.commit();
 
       return {
         'success': true,

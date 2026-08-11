@@ -42,7 +42,9 @@ class MatchService {
         .snapshots()
         .map((s) => s.docs
             .map((d) => MatchModel.fromFirestore(d))
-            .where((m) => m.status == MatchStatus.completed || m.status == MatchStatus.cancelled)
+            .where((m) =>
+                m.status == MatchStatus.completed ||
+                m.status == MatchStatus.cancelled)
             .toList());
   }
 
@@ -82,7 +84,10 @@ class MatchService {
         'isFrozen': false,
         'createdAt': FieldValue.serverTimestamp(),
       });
-      return {'success': true, 'message': 'Match scheduled! Odds: Team A ${oddsA}x | Team B ${oddsB}x'};
+      return {
+        'success': true,
+        'message': 'Match scheduled! Odds: Team A ${oddsA}x | Team B ${oddsB}x'
+      };
     } catch (e) {
       return {'success': false, 'message': 'Failed to schedule match: $e'};
     }
