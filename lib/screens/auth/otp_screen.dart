@@ -93,6 +93,12 @@ class _OtpScreenState extends State<OtpScreen> {
     return _controllers.map((c) => c.text).join();
   }
 
+  String get _maskedEmail {
+    final at = _email.indexOf('@');
+    if (at < 2) return _email;
+    return '${_email.substring(0, 2)}${'•' * (at - 2)}${_email.substring(at)}';
+  }
+
   // Called when user types in any OTP box
   void _onOtpChanged(String value, int index) {
     if (value.length == 1 && index < 5) {
@@ -281,7 +287,7 @@ class _OtpScreenState extends State<OtpScreen> {
                   // Show masked email like: dr***@students.mak.ac.ug
                   Text(
                     _argumentsLoaded
-                        ? 'Code sent to $_email'
+                        ? 'We sent a code to $_maskedEmail'
                         : 'Code sent to your email',
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.8),
@@ -300,7 +306,7 @@ class _OtpScreenState extends State<OtpScreen> {
                   const SizedBox(height: 16),
 
                   const Text(
-                    'Enter the 6-digit code we sent to your email address',
+                    'Enter the six-digit security code from your email.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: AppColors.textGrey,
@@ -310,6 +316,16 @@ class _OtpScreenState extends State<OtpScreen> {
                   ),
 
                   const SizedBox(height: 40),
+
+                  Text(
+                    '${_otpCode.length} of 6 digits entered',
+                    style: const TextStyle(
+                      color: AppColors.textGrey,
+                      fontSize: AppSizes.fontSmall,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
 
                   // 6 OTP INPUT BOXES
                   Row(
@@ -431,23 +447,31 @@ class _OtpScreenState extends State<OtpScreen> {
   // Builds a single OTP digit input box
   Widget _buildOtpBox(int index) {
     return SizedBox(
-      width: 52,
-      height: 60,
-      child: TextField(
+      width: 48,
+      height: 56,
+      child: TextFormField(
         controller: _controllers[index],
         focusNode: _focusNodes[index],
         textAlign: TextAlign.center,
+        // keyboardType.number shows numeric keyboard on phone
         keyboardType: TextInputType.number,
+        // maxLength limits input to 1 character
+        maxLength: 1,
         style: const TextStyle(
           fontSize: AppSizes.fontXL,
           fontWeight: FontWeight.bold,
-          color: Colors.black,
+          color: AppColors.dark,
         ),
+        // inputFormatters restrict what can be typed
         inputFormatters: [
+          // FilteringTextInputFormatter.digitsOnly allows only 0-9
           FilteringTextInputFormatter.digitsOnly,
         ],
+        autofillHints: const [AutofillHints.oneTimeCode],
         onChanged: (value) => _onOtpChanged(value, index),
         decoration: InputDecoration(
+          // counterText: '' hides the character counter that maxLength shows
+          counterText: '',
           filled: true,
           fillColor: Colors.white,
           border: OutlineInputBorder(
@@ -460,6 +484,7 @@ class _OtpScreenState extends State<OtpScreen> {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+            // Active box gets a green border
             borderSide: const BorderSide(color: AppColors.primary, width: 2),
           ),
         ),
