@@ -38,19 +38,19 @@ class TournamentFairnessView extends StatelessWidget {
           children: [
             _StatusBanner(report: report),
             const SizedBox(height: 16),
-            Text(
-              'Meetings per tribe-pair per game '
+            const Text(
+              'Meetings per clan-pair per game '
               '(expected: ${InterClanGames2026.expectedMeetingsPerPairPerGame})',
-              style: const TextStyle(fontWeight: FontWeight.bold),
+              style: TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             ...report.pairMeetings.map((p) => _PairRow(entry: p)),
             const SizedBox(height: 20),
-            Text(
-              '4 PM / 5 PM slot balance per tribe per team sport '
+            const Text(
+              '4 PM / 5 PM slot balance per clan per team sport '
               '(expected: ${InterClanGames2026.expectedSlotBalance}-'
               '${InterClanGames2026.expectedSlotBalance})',
-              style: const TextStyle(fontWeight: FontWeight.bold),
+              style: TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             ...report.slotBalances.map((s) => _SlotRow(entry: s)),
