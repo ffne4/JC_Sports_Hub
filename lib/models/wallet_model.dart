@@ -1,70 +1,87 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+// Type of wallet transaction - a deposit adds money, a withdrawal takes it out
+class TransactionType {
+  static const String deposit = 'deposit';
+  static const String withdrawal = 'withdrawal';
+}
+
+// Status of a transaction while the admin manually verifies real mobile-money movement
 class TransactionStatus {
   static const String pending = 'pending';
   static const String confirmed = 'confirmed';
   static const String rejected = 'rejected';
-  static const String expired = 'expired';
 }
 
-class TransactionType {
-  static const String deposit = 'deposit';
-  static const String bet = 'bet';
-  static const String winnings = 'winnings';
-  static const String withdrawal = 'withdrawal';
-  static const String refund = 'refund';
-}
-
-class WalletTransaction {
+// Represents one deposit or withdrawal request.
+// Nothing here moves real money - it only records what the user CLAIMS
+// they sent/want, until an admin manually confirms it against their own
+// mobile money app and taps Confirm.
+class WalletTransactionModel {
   final String id;
   final String userId;
   final String userName;
-  final String userMomoNumber;
-  final String type;
-  final int amount;
-  final int fee;
-  final int netAmount;
-  final String status;
-  final String reference;
-  final String description;
-  final String matchId;
-  final String betTeam;
+  final String type; // deposit or withdrawal - see TransactionType
+  final double amount; // amount the user requested
+  final double?
+      netAmountToSend; // withdrawals only - amount after the 12% charge
+  final String? momoNumber; // user's number: where they sent from (deposit)
+                           // or where the admin should send to (withdrawal)
+  final String? reference; // e.g. "JCS-1234-ABC" - quoted by the user when
+                           // sending money so the admin can match it
+  final String status; // pending, confirmed, rejected - see TransactionStatus
   final DateTime createdAt;
+  final DateTime? confirmedAt;
+  final String? confirmedBy; // admin uid who actioned this
 
-  const WalletTransaction({
+  const WalletTransactionModel({
     required this.id,
     required this.userId,
     required this.userName,
-    required this.userMomoNumber,
     required this.type,
     required this.amount,
-    required this.fee,
-    required this.netAmount,
+    this.netAmountToSend,
+    this.momoNumber,
+    this.reference,
     required this.status,
-    required this.reference,
-    required this.description,
-    required this.matchId,
-    required this.betTeam,
     required this.createdAt,
+    this.confirmedAt,
+    this.confirmedBy,
   });
 
-  factory WalletTransaction.fromFirestore(DocumentSnapshot doc) {
+  factory WalletTransactionModel.fromFirestore(DocumentSnapshot doc) {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
-    return WalletTransaction(
+    return WalletTransactionModel(
       id: doc.id,
       userId: data['userId'] ?? '',
       userName: data['userName'] ?? '',
-      userMomoNumber: data['userMomoNumber'] ?? '',
       type: data['type'] ?? TransactionType.deposit,
-      amount: data['amount'] ?? 0,
-      fee: data['fee'] ?? 0,
-      netAmount: data['netAmount'] ?? 0,
+      amount: (data['amount'] ?? 0).toDouble(),
+      netAmountToSend: data['netAmountToSend'] != null
+          ? (data['netAmountToSend'] as num).toDouble()
+          : null,
+      momoNumber: data['momoNumber'],
+      reference: data['reference'],
       status: data['status'] ?? TransactionStatus.pending,
-      reference: data['reference'] ?? '',
-      description: data['description'] ?? '',
-      matchId: data['matchId'] ?? '',
-      betTeam: data['betTeam'] ?? '',
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      confirmedAt: (data['confirmedAt'] as Timestamp?)?.toDate(),
+      confirmedBy: data['confirmedBy'],
     );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'userId': userId,
+      'userName': userName,
+      'type': type,
+      'amount': amount,
+      'netAmountToSend': netAmountToSend,
+      'momoNumber': momoNumber,
+      'reference': reference,
+      'status': status,
+      'createdAt': FieldValue.serverTimestamp(),
+      'confirmedAt': null,
+      'confirmedBy': null,
+    };
   }
 }

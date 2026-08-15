@@ -108,17 +108,46 @@ class MatchService {
     });
   }
 
-  Future<void> updateScore({
+  Future<Map<String, dynamic>> updateScore({
     required String matchId,
     required int scoreA,
     required int scoreB,
     required String status,
   }) async {
-    await _firestore.collection(_collection).doc(matchId).update({
-      'scoreA': scoreA,
-      'scoreB': scoreB,
-      'status': status,
-    });
+    try {
+      await _firestore.collection(_collection).doc(matchId).update({
+        'scoreA': scoreA,
+        'scoreB': scoreB,
+        'status': status,
+      });
+      return {'success': true, 'message': 'Score updated'};
+    } catch (e) {
+      return {'success': false, 'message': 'Failed to update score: $e'};
+    }
+  }
+
+  // Bulk-imports verified inter-clan tournament fixtures (from
+  // InterClanFixtureSeed) so the admin can seed the schedule in one tap.
+  Future<Map<String, dynamic>> replaceAllFixtures(
+      List<Map<String, dynamic>> fixtures) async {
+    try {
+      final batch = _firestore.batch();
+      final fixturesCol = _firestore.collection('tournament_fixtures');
+      for (final fixture in fixtures) {
+        final id = fixture['id'] as String?;
+        batch.set(
+          id != null ? fixturesCol.doc(id) : fixturesCol.doc(),
+          Map<String, dynamic>.from(fixture),
+        );
+      }
+      await batch.commit();
+      return {
+        'success': true,
+        'message': 'Imported ${fixtures.length} verified tournament fixtures'
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Failed to import fixtures: $e'};
+    }
   }
 
   Future<void> deleteMatch(String matchId) async {

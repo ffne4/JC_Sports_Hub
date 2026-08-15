@@ -3,12 +3,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../models/post_model.dart';
 import '../../models/match_model.dart';
-import '../../models/wallet_model.dart';
 import '../../services/post_service.dart';
 import '../../services/match_service.dart';
-import '../../services/wallet_service.dart';
 import '../../utils/constants.dart';
 import '../tournaments/admin_tournaments_tab.dart';
+import 'admin_wallet_screen.dart';
 
 class AdminPanelScreen extends StatefulWidget {
   const AdminPanelScreen({super.key});
@@ -20,6 +19,12 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final PostService _postService = PostService();
+  // Cached streams - build() must never create a new Firestore stream every
+  // rebuild (that re-subscribes and can freeze the admin panel).
+  late final Stream<List<PostModel>> _pendingPostsStream =
+      _postService.getPendingPosts();
+  late final Stream<List<PostModel>> _announcementsStream =
+      _postService.getAnnouncements();
   final TextEditingController _announcementController = TextEditingController();
   bool _isPostingAnnouncement = false;
   final String _adminId = FirebaseAuth.instance.currentUser?.uid ?? '';
@@ -79,7 +84,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
           _buildAnnouncementsTab(),
           _buildSuggestionsTab(),
           _MatchesTabWidget(adminId: _adminId),
-          _buildWalletTab(),
+          const AdminWalletScreen(),
           const AdminTournamentsTab(),
         ],
       ),
@@ -88,7 +93,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
 
   Widget _buildPendingPostsTab() {
     return StreamBuilder<List<PostModel>>(
-      stream: _postService.getPendingPosts(),
+      stream: _pendingPostsStream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
@@ -306,7 +311,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                 fontSize: AppSizes.fontMedium, fontWeight: FontWeight.bold)),
         const SizedBox(height: 12),
         StreamBuilder<List<PostModel>>(
-          stream: _postService.getAnnouncements(),
+          stream: _announcementsStream,
           builder: (context, snapshot) {
             final list = snapshot.data ?? [];
             if (list.isEmpty) {
@@ -501,369 +506,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     );
   }
 
-  Widget _buildWalletTab() {
-    return DefaultTabController(
-      length: 2,
-      child: Column(children: [
-        Container(
-          color: Colors.white,
-          child: const TabBar(
-            labelColor: AppColors.primary,
-            unselectedLabelColor: Colors.grey,
-            indicatorColor: AppColors.primary,
-            tabs: [Tab(text: 'Deposits'), Tab(text: 'Withdrawals')],
-          ),
-        ),
-        Expanded(
-          child: TabBarView(children: [
-            StreamBuilder<List<WalletTransaction>>(
-              stream: WalletService().getPendingDeposits(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                      child:
-                          CircularProgressIndicator(color: AppColors.primary));
-                }
-                final deposits = snapshot.data ?? [];
-                if (deposits.isEmpty) {
-                  return Center(
-                      child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                        Icon(Icons.check_circle_outline,
-                            size: 60, color: Colors.green.shade300),
-                        const SizedBox(height: 16),
-                        const Text('No pending deposits',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: AppSizes.fontLarge)),
-                      ]));
-                }
-                return ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: deposits.length,
-                  itemBuilder: (context, index) =>
-                      _DepositCard(tx: deposits[index]),
-                );
-              },
-            ),
-            StreamBuilder<List<WalletTransaction>>(
-              stream: WalletService().getPendingWithdrawals(),
-              builder: (context, snapshot) {
-                final withdrawals = snapshot.data ?? [];
-                if (withdrawals.isEmpty) {
-                  return Center(
-                      child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                        Icon(Icons.check_circle_outline,
-                            size: 60, color: Colors.green.shade300),
-                        const SizedBox(height: 16),
-                        const Text('No pending withdrawals',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: AppSizes.fontLarge)),
-                      ]));
-                }
-                return ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: withdrawals.length,
-                  itemBuilder: (context, index) =>
-                      _WithdrawalCard(tx: withdrawals[index]),
-                );
-              },
-            ),
-          ]),
-        ),
-      ]),
-    );
-  }
 }
-
-// ── DEPOSIT CARD ──────────────────────────────────────────────────────────
-
-class _DepositCard extends StatefulWidget {
-  final WalletTransaction tx;
-  const _DepositCard({required this.tx});
-  @override
-  State<_DepositCard> createState() => _DepositCardState();
-}
-
-class _DepositCardState extends State<_DepositCard> {
-  late TextEditingController _amountController;
-  bool _isConfirming = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _amountController =
-        TextEditingController(text: widget.tx.amount.toString());
-  }
-
-  @override
-  void dispose() {
-    _amountController.dispose();
-    super.dispose();
-  }
-
-  String _fmt(int amount) => amount.toString().replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]!},');
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
-        border: Border.all(color: Colors.orange.shade200),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)
-        ],
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          const Icon(Icons.person, color: AppColors.primary, size: 16),
-          const SizedBox(width: 6),
-          Expanded(
-              child: Text(widget.tx.userName,
-                  style: const TextStyle(fontWeight: FontWeight.bold))),
-          Text('${_fmt(widget.tx.amount)} UGX',
-              style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.green,
-                  fontSize: AppSizes.fontMedium)),
-        ]),
-        const SizedBox(height: 6),
-        Row(children: [
-          const Icon(Icons.phone, size: 14, color: Colors.grey),
-          const SizedBox(width: 4),
-          Text('From: ${widget.tx.userMomoNumber}',
-              style: TextStyle(
-                  color: Colors.grey.shade600, fontSize: AppSizes.fontSmall)),
-        ]),
-        const SizedBox(height: 4),
-        Row(children: [
-          const Icon(Icons.tag, size: 14, color: Colors.grey),
-          const SizedBox(width: 4),
-          Text('Ref: ${widget.tx.reference}',
-              style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: AppSizes.fontSmall,
-                  color: AppColors.dark,
-                  letterSpacing: 1)),
-        ]),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _amountController,
-          keyboardType: TextInputType.number,
-          decoration: InputDecoration(
-            labelText: 'Actual amount received (UGX)',
-            isDense: true,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: AppColors.primary, width: 2),
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
-        Row(children: [
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: _isConfirming
-                  ? null
-                  : () async {
-                      final actual = int.tryParse(_amountController.text) ?? 0;
-                      if (actual <= 0) {
-                        ScaffoldMessenger.of(context)
-                            .showSnackBar(const SnackBar(
-                          content: Text('Enter the actual amount received'),
-                          backgroundColor: AppColors.error,
-                        ));
-                        return;
-                      }
-                      setState(() => _isConfirming = true);
-                      final result = await WalletService().confirmDeposit(
-                          widget.tx,
-                          actualAmountReceived: actual);
-                      setState(() => _isConfirming = false);
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: Text(result['message']),
-                          backgroundColor: result['success']
-                              ? Colors.green
-                              : AppColors.error,
-                          behavior: SnackBarBehavior.floating,
-                        ));
-                      }
-                    },
-              icon: _isConfirming
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                          color: Colors.white, strokeWidth: 2))
-                  : const Icon(Icons.check, size: 16),
-              label: const Text('Confirm Payment'),
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(AppSizes.radiusSmall))),
-            ),
-          ),
-          const SizedBox(width: 8),
-          ElevatedButton.icon(
-            onPressed: () async {
-              await WalletService().rejectDeposit(widget.tx.id);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                  content: Text('Deposit rejected'),
-                  backgroundColor: AppColors.error,
-                  behavior: SnackBarBehavior.floating,
-                ));
-              }
-            },
-            icon: const Icon(Icons.close, size: 16),
-            label: const Text('Reject'),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.error,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppSizes.radiusSmall))),
-          ),
-        ]),
-      ]),
-    );
-  }
-}
-
-// ── WITHDRAWAL CARD ───────────────────────────────────────────────────────
-
-class _WithdrawalCard extends StatelessWidget {
-  final WalletTransaction tx;
-  const _WithdrawalCard({required this.tx});
-
-  String _fmt(int amount) => amount.toString().replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]!},');
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
-        border: Border.all(color: Colors.blue.shade200),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)
-        ],
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          const Icon(Icons.person, color: AppColors.primary, size: 16),
-          const SizedBox(width: 6),
-          Expanded(
-              child: Text(tx.userName,
-                  style: const TextStyle(fontWeight: FontWeight.bold))),
-          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Text('${_fmt(tx.netAmount)} UGX',
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.orange,
-                    fontSize: AppSizes.fontMedium)),
-            Text('(after 12% fee)',
-                style: TextStyle(color: Colors.grey.shade500, fontSize: 10)),
-          ]),
-        ]),
-        const SizedBox(height: 6),
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: Colors.orange.shade50,
-            borderRadius: BorderRadius.circular(AppSizes.radiusSmall),
-            border: Border.all(color: Colors.orange.shade200),
-          ),
-          child: Row(children: [
-            const Icon(Icons.send_to_mobile, color: Colors.orange, size: 18),
-            const SizedBox(width: 8),
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('SEND THIS AMOUNT TO:',
-                  style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.orange,
-                      fontWeight: FontWeight.bold)),
-              Text(tx.userMomoNumber,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: AppSizes.fontMedium,
-                      color: AppColors.dark)),
-              Text('${_fmt(tx.netAmount)} UGX',
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: AppSizes.fontLarge,
-                      color: Colors.green)),
-            ]),
-          ]),
-        ),
-        const SizedBox(height: 4),
-        Text('Requested: ${_fmt(tx.amount)} UGX | Fee: ${_fmt(tx.fee)} UGX',
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
-        const SizedBox(height: 12),
-        Row(children: [
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: () async {
-                await WalletService().confirmWithdrawal(tx);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text('Withdrawal confirmed for ${tx.userName}'),
-                    backgroundColor: Colors.green,
-                    behavior: SnackBarBehavior.floating,
-                  ));
-                }
-              },
-              icon: const Icon(Icons.check, size: 16),
-              label: const Text('Mark as Sent'),
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(AppSizes.radiusSmall))),
-            ),
-          ),
-          const SizedBox(width: 8),
-          ElevatedButton.icon(
-            onPressed: () async {
-              await WalletService().rejectWithdrawal(tx);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                  content: Text('Withdrawal rejected. Amount refunded.'),
-                  backgroundColor: AppColors.error,
-                  behavior: SnackBarBehavior.floating,
-                ));
-              }
-            },
-            icon: const Icon(Icons.close, size: 16),
-            label: const Text('Reject'),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.error,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppSizes.radiusSmall))),
-          ),
-        ]),
-      ]),
-    );
-  }
-}
-
-// ── MATCHES TAB ───────────────────────────────────────────────────────────
 
 class _MatchesTabWidget extends StatefulWidget {
   final String adminId;
@@ -873,6 +516,13 @@ class _MatchesTabWidget extends StatefulWidget {
 }
 
 class _MatchesTabWidgetState extends State<_MatchesTabWidget> {
+  final MatchService _matchService = MatchService();
+  // Cached once so builds don't re-create (and re-subscribe to) the
+  // Firestore realtime stream on every rebuild - that was causing the
+  // admin panel to freeze ("app isn't responding") when opening Matches.
+  late final Stream<List<MatchModel>> _matchesStream =
+      _matchService.getAllMatches();
+
   final _teamAController = TextEditingController();
   final _teamBController = TextEditingController();
   final _venueController = TextEditingController();
@@ -902,14 +552,33 @@ class _MatchesTabWidgetState extends State<_MatchesTabWidget> {
     super.dispose();
   }
 
-  String _fmt(int amount) => amount.toString().replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]!},');
-
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    return StreamBuilder<List<MatchModel>>(
+      stream: _matchesStream,
+      builder: (context, snapshot) {
+        final matches = snapshot.data ?? [];
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: matches.length + 1,
+          itemBuilder: (context, index) {
+            if (index == 0) return _buildScheduleForm();
+            return _MatchAdminCard(
+                match: matches[index - 1], adminId: widget.adminId);
+          },
+        );
+      },
+    );
+  }
+
+  // The top section of the tab - the "Schedule a Match" form and the
+  // "Manage Matches & Accountability" header. Kept in its own method so the
+  // match cards below can be built lazily. Eagerly building dozens of heavy
+  // cards was what made the admin panel freeze ("app isn't responding").
+  Widget _buildScheduleForm() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
         const Text('Schedule a Match',
             style: TextStyle(
                 fontSize: AppSizes.fontLarge, fontWeight: FontWeight.bold)),
@@ -1088,22 +757,7 @@ class _MatchesTabWidgetState extends State<_MatchesTabWidget> {
             style: TextStyle(
                 fontSize: AppSizes.fontMedium, fontWeight: FontWeight.bold)),
         const SizedBox(height: 12),
-        StreamBuilder<List<MatchModel>>(
-          stream: MatchService().getAllMatches(),
-          builder: (context, snapshot) {
-            final matches = snapshot.data ?? [];
-            if (matches.isEmpty) {
-              return Text('No matches yet.',
-                  style: TextStyle(color: Colors.grey.shade500));
-            }
-            return Column(
-                children: matches
-                    .map((m) =>
-                        _MatchAdminCard(match: m, adminId: widget.adminId))
-                    .toList());
-          },
-        ),
-      ]),
+      ],
     );
   }
 
@@ -1602,160 +1256,9 @@ class _MatchAdminCardState extends State<_MatchAdminCard> {
                 }),
               ],
             ],
-
-            // DISTRIBUTE WINNINGS
-            if (widget.match.status == MatchStatus.completed &&
-                !widget.match.winnersDistributed) ...[
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () => _showDistributeDialog(context),
-                  icon: const Icon(Icons.emoji_events, size: 16),
-                  label: const Text('Distribute Winnings'),
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.gold,
-                      foregroundColor: Colors.black,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8))),
-                ),
-              ),
-            ],
-
-            if (widget.match.winnersDistributed) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.green.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green.shade200),
-                ),
-                child: const Row(children: [
-                  Icon(Icons.check_circle, color: Colors.green, size: 16),
-                  SizedBox(width: 6),
-                  Text('Winnings distributed',
-                      style: TextStyle(
-                          color: Colors.green,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12)),
-                ]),
-              ),
-            ],
           ]),
         ),
       ]),
-    );
-  }
-
-  void _showDistributeDialog(BuildContext context) {
-    final confirmController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Distribute Winnings'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('Match ID: ${widget.match.id}',
-              style:
-                  const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          const Text('Type the match ID above to confirm:',
-              style: TextStyle(fontSize: 12)),
-          const SizedBox(height: 8),
-          TextField(
-            controller: confirmController,
-            decoration: const InputDecoration(
-                hintText: 'Paste match ID here',
-                border: OutlineInputBorder(),
-                isDense: true),
-          ),
-          const SizedBox(height: 16),
-          const Text('Which team won?',
-              style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Row(children: [
-            Expanded(
-                child: ElevatedButton(
-              onPressed: () async {
-                Navigator.pop(context);
-                final result = await WalletService().distributeWinnings(
-                  matchId: widget.match.id,
-                  winnerTeam: 'A',
-                  adminId: widget.adminId,
-                  confirmationText: confirmController.text.trim(),
-                );
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(result['message']),
-                    backgroundColor:
-                        result['success'] ? Colors.green : AppColors.error,
-                    behavior: SnackBarBehavior.floating,
-                    duration: const Duration(seconds: 6),
-                  ));
-                }
-              },
-              style:
-                  ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-              child: Text(widget.match.teamA,
-                  style: const TextStyle(color: Colors.white)),
-            )),
-            const SizedBox(width: 8),
-            Expanded(
-                child: ElevatedButton(
-              onPressed: () async {
-                Navigator.pop(context);
-                final result = await WalletService().distributeWinnings(
-                  matchId: widget.match.id,
-                  winnerTeam: 'B',
-                  adminId: widget.adminId,
-                  confirmationText: confirmController.text.trim(),
-                );
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(result['message']),
-                    backgroundColor:
-                        result['success'] ? Colors.green : AppColors.error,
-                    behavior: SnackBarBehavior.floating,
-                    duration: const Duration(seconds: 6),
-                  ));
-                }
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-              child: Text(widget.match.teamB,
-                  style: const TextStyle(color: Colors.white)),
-            )),
-          ]),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: () async {
-                Navigator.pop(context);
-                final result = await WalletService().distributeWinnings(
-                  matchId: widget.match.id,
-                  winnerTeam: 'CANCELLED',
-                  adminId: widget.adminId,
-                  confirmationText: confirmController.text.trim(),
-                );
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(result['message']),
-                    backgroundColor:
-                        result['success'] ? Colors.green : AppColors.error,
-                    behavior: SnackBarBehavior.floating,
-                  ));
-                }
-              },
-              child: const Text('Match Cancelled - Refund All'),
-            ),
-          ),
-        ]),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'))
-        ],
-      ),
     );
   }
 }

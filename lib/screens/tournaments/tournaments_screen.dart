@@ -271,7 +271,7 @@ class _TournamentsScreenState extends State<TournamentsScreen>
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        '${fixture.homeCourse} vs ${fixture.awayCourse}',
+                                        '${fixture.homeClan} vs ${fixture.awayClan}',
                                         style: TextStyle(
                                           fontWeight: isPast
                                               ? FontWeight.w500
@@ -511,7 +511,7 @@ class _TournamentsScreenState extends State<TournamentsScreen>
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
-                children: tournament.courses.map((course) {
+                children: tournament.tribes.map((course) {
                   final isSelected = _selectedCourse == course;
                   return ChoiceChip(
                     label: Text(course),
@@ -565,7 +565,7 @@ class _TournamentsScreenState extends State<TournamentsScreen>
                               final success =
                                   await _tournamentService.registerStudent(
                                 tournamentId: tournament.id,
-                                course: selectedCourse,
+                                tribe: selectedCourse,
                                 game: selectedGame,
                                 studentName: studentName,
                                 studentNumber: studentNumber,
@@ -610,7 +610,7 @@ class _TournamentsScreenState extends State<TournamentsScreen>
       String tournamentId, String course, String game) async {
     final registrations =
         await _tournamentService.getStudentRegistrations(tournamentId);
-    return registrations.any((r) => r.course == course && r.game == game);
+    return registrations.any((r) => r.tribe == course && r.game == game);
   }
 
   Widget _buildStandingsTab(TournamentModel tournament) {
@@ -703,7 +703,7 @@ class _TournamentsScreenState extends State<TournamentsScreen>
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  point.course,
+                                  point.tribe,
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: AppSizes.fontSmall,

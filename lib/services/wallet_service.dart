@@ -1,1011 +1,413 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/wallet_model.dart';
-import '../utils/formatters.dart';
 
+// Handles everything to do with a user's wallet balance and the manual
+// deposit/withdrawal flow. No real money ever moves through this app -
+// money moves by hand via mobile money, and this service only keeps the
+// numbers in sync with what an admin has manually confirmed.
+//
+// IMPORTANT: every method that changes a balance uses Firestore's
+// runTransaction so a balance update and its related transaction record
+// can never happen independently. That was the root cause of an earlier
+// bug where bets were placed without the wallet being deducted - two
+// separate writes, one of which silently failed.
 class WalletService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  static const String _usersCollection = 'users';
+  static const String _transactionsCollection = 'transactions';
 
+  // Withdrawal charge - admin keeps 12%, user receives 88% of what they asked for
+  static const double withdrawalChargeRate = 0.12;
+  static const double minimumWithdrawal = 5000;
+
+  // Where users send money for deposits - shown on the Deposit screen
   static const String adminMomoNumber = '0768658988';
   static const String adminMomoName = 'Drake Wanswa';
-  static const int minimumDeposit = 1000;
-  static const int maximumDeposit = 50000;
-  static const int minimumBet = 500;
-  static const int maximumBet = 20000;
-  static const int minimumWithdrawal = 1000;
-  static const int maximumWithdrawalPerDay = 100000;
-  static const double withdrawalFeePercent = 0.12;
-  static const int depositReferenceExpiryMinutes = 120;
-  static const int bettingWindowMinutes = 10;
-  static const int winningsHoldHours = 24;
-  static const List<String> validMomoPrefixes = [
-    '077',
-    '078',
-    '076',
-    '075',
-    '070',
-    '039',
-    '031'
-  ];
 
-  bool isValidMomoNumber(String number) {
-    final cleaned = number.replaceAll(' ', '').replaceAll('-', '');
-    if (cleaned.length != 10) return false;
-    return validMomoPrefixes.any((p) => cleaned.startsWith(p));
-  }
-
-  String _generateReference(String userName) {
+  // A short code the user quotes when sending money so the admin can match
+  // their payment to the right transaction. e.g. "JCS-4821-DRK"
+  static String generateReference(String userName) {
     final random = Random();
     final number = 1000 + random.nextInt(9000);
-    final clean = userName.replaceAll(' ', '');
-    final nameCode =
-        clean.substring(0, clean.length >= 3 ? 3 : clean.length).toUpperCase();
+    final clean = userName.replaceAll(' ', '').toUpperCase();
+    final nameCode = clean.length >= 3 ? clean.substring(0, 3) : clean;
     return 'JCS-$number-$nameCode';
   }
 
-  Stream<int> getBalanceStream(String userId) {
-    return _firestore.collection('users').doc(userId).snapshots().map((doc) {
-      if (doc.exists) {
+  // ---------------------------------------------------------------------
+  // READING BALANCES
+  // ---------------------------------------------------------------------
+
+  // Live wallet balance for a user. Treats a missing field as 0 so this
+  // works even for users who existed before the wallet feature was added.
+  Stream<double> getWalletBalance(String userId) {
+    return _firestore.collection(_usersCollection).doc(userId).snapshots().map(
+      (doc) {
+        if (!doc.exists) return 0.0;
         final data = doc.data() as Map<String, dynamic>;
-        final total = data['walletBalance'] ?? 0;
-        final locked = data['lockedBalance'] ?? 0;
-        return ((total - locked) as int);
-      }
-      return 0;
+        return (data['walletBalance'] ?? 0).toDouble();
+      },
+    );
+  }
+
+  // Live "money currently promised out but not yet sent" - shown to the
+  // user so they understand why a pending withdrawal isn't spendable.
+  Stream<double> getPendingWithdrawalAmount(String userId) {
+    return _firestore.collection(_usersCollection).doc(userId).snapshots().map(
+      (doc) {
+        if (!doc.exists) return 0.0;
+        final data = doc.data() as Map<String, dynamic>;
+        return (data['pendingWithdrawal'] ?? 0).toDouble();
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------
+  // TRANSACTION HISTORY
+  // ---------------------------------------------------------------------
+
+  // A user's own deposit/withdrawal history, newest first.
+  // Fetches all of this user's transactions then sorts in Dart - same
+  // approach match_service.dart uses to avoid needing composite indexes.
+  Stream<List<WalletTransactionModel>> getMyTransactions(String userId) {
+    return _firestore
+        .collection(_transactionsCollection)
+        .where('userId', isEqualTo: userId)
+        .snapshots()
+        .map((snapshot) {
+      final list = snapshot.docs
+          .map((doc) => WalletTransactionModel.fromFirestore(doc))
+          .toList();
+      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return list;
     });
   }
 
-  Future<int> getBalance(String userId) async {
-    try {
-      final doc = await _firestore.collection('users').doc(userId).get();
-      if (doc.exists) {
-        final data = doc.data() as Map<String, dynamic>;
-        return ((data['walletBalance'] ?? 0) - (data['lockedBalance'] ?? 0))
-            as int;
-      }
-      return 0;
-    } catch (e) {
-      return 0;
-    }
-  }
-
-  Stream<List<WalletTransaction>> getTransactionHistory(String userId) {
+  // Admin - every deposit request still waiting for confirmation
+  Stream<List<WalletTransactionModel>> getPendingDeposits() {
     return _firestore
-        .collection('transactions')
-        .where('userId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((s) =>
-            s.docs.map((d) => WalletTransaction.fromFirestore(d)).toList());
-  }
-
-  Stream<List<WalletTransaction>> getPendingDeposits() {
-    return _firestore
-        .collection('transactions')
+        .collection(_transactionsCollection)
         .where('type', isEqualTo: TransactionType.deposit)
         .where('status', isEqualTo: TransactionStatus.pending)
-        .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((s) =>
-            s.docs.map((d) => WalletTransaction.fromFirestore(d)).toList());
+        .map((snapshot) {
+      final list = snapshot.docs
+          .map((doc) => WalletTransactionModel.fromFirestore(doc))
+          .toList();
+      list.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      return list;
+    });
   }
 
-  Stream<List<WalletTransaction>> getPendingWithdrawals() {
+  // Admin - every withdrawal request still waiting to be paid out
+  Stream<List<WalletTransactionModel>> getPendingWithdrawals() {
     return _firestore
-        .collection('transactions')
+        .collection(_transactionsCollection)
         .where('type', isEqualTo: TransactionType.withdrawal)
         .where('status', isEqualTo: TransactionStatus.pending)
-        .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((s) =>
-            s.docs.map((d) => WalletTransaction.fromFirestore(d)).toList());
-  }
-
-  // ── DEPOSIT ──────────────────────────────────────────────────────────────
-
-  Future<Map<String, dynamic>> createDepositRequest({
-    required String userId,
-    required String userName,
-    required String userMomoNumber,
-    required int amount,
-  }) async {
-    if (!isValidMomoNumber(userMomoNumber)) {
-      return {
-        'success': false,
-        'message': 'Invalid MoMo number. Must be a valid Uganda number.'
-      };
-    }
-    if (amount < minimumDeposit) {
-      return {
-        'success': false,
-        'message': 'Minimum deposit is $minimumDeposit UGX'
-      };
-    }
-    if (amount > maximumDeposit) {
-      return {
-        'success': false,
-        'message': 'Maximum deposit is ${_fmt(maximumDeposit)} UGX'
-      };
-    }
-
-    // Check existing pending deposit
-    final existingPending = await _firestore
-        .collection('transactions')
-        .where('userId', isEqualTo: userId)
-        .where('type', isEqualTo: TransactionType.deposit)
-        .where('status', isEqualTo: TransactionStatus.pending)
-        .get();
-
-    if (existingPending.docs.isNotEmpty) {
-      final d = existingPending.docs.first.data();
-      final createdAt = (d['createdAt'] as Timestamp?)?.toDate();
-      if (createdAt != null) {
-        final age = DateTime.now().difference(createdAt).inMinutes;
-        if (age < depositReferenceExpiryMinutes) {
-          return {
-            'success': false,
-            'message':
-                'You have a pending deposit. Wait ${depositReferenceExpiryMinutes - age} minutes for it to expire.'
-          };
-        } else {
-          await _firestore
-              .collection('transactions')
-              .doc(existingPending.docs.first.id)
-              .update({'status': TransactionStatus.expired});
-        }
-      }
-    }
-
-    // Max 3 per day - client side filter
-    final allUserDeposits = await _firestore
-        .collection('transactions')
-        .where('userId', isEqualTo: userId)
-        .where('type', isEqualTo: TransactionType.deposit)
-        .get();
-
-    final todayStart =
-        DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
-    final todayCount = allUserDeposits.docs.where((doc) {
-      final data = doc.data();
-      final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
-      return createdAt != null && createdAt.isAfter(todayStart);
-    }).length;
-
-    if (todayCount >= 3) {
-      return {
-        'success': false,
-        'message': 'Maximum 3 deposit requests per day. Try again tomorrow.'
-      };
-    }
-
-    try {
-      final reference = _generateReference(userName);
-      final expiresAt = DateTime.now()
-          .add(const Duration(minutes: depositReferenceExpiryMinutes));
-
-      final txRef = _firestore.collection('transactions').doc();
-      final adminUsers = await _firestore
-          .collection('users')
-          .where('isAdmin', isEqualTo: true)
-          .get();
-
-      final batch = _firestore.batch();
-      batch.set(txRef, {
-        'userId': userId,
-        'userName': userName,
-        'userMomoNumber': userMomoNumber,
-        'type': TransactionType.deposit,
-        'amount': amount,
-        'actualAmountReceived': 0,
-        'status': TransactionStatus.pending,
-        'reference': reference,
-        'description': 'Wallet deposit via MTN MoMo',
-        'matchId': '',
-        'betTeam': '',
-        'fee': 0,
-        'netAmount': amount,
-        'creditIssued': false,
-        'expiresAt': Timestamp.fromDate(expiresAt),
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      for (final admin in adminUsers.docs) {
-        final notifRef = _firestore.collection('notifications').doc();
-        batch.set(notifRef, {
-          'userId': admin.id,
-          'title': 'Deposit request',
-          'message':
-              '$userName requested a deposit of ${_fmt(amount)} UGX. Ref: $reference',
-          'type': 'admin',
-          'isRead': false,
-          'createdAt': FieldValue.serverTimestamp(),
-          'referenceId': txRef.id,
-        });
-      }
-
-      await batch.commit();
-
-      return {
-        'success': true,
-        'reference': reference,
-        'expiresAt': expiresAt,
-        'message': 'Deposit request created'
-      };
-    } catch (e) {
-      return {'success': false, 'message': 'Failed to create deposit: $e'};
-    }
-  }
-
-  // Atomic confirm - prevents double crediting even with multiple taps
-  Future<Map<String, dynamic>> confirmDeposit(
-    WalletTransaction transaction, {
-    required int actualAmountReceived,
-  }) async {
-    if (actualAmountReceived <= 0) {
-      return {
-        'success': false,
-        'message': 'Please enter the actual amount received'
-      };
-    }
-
-    bool alreadyCredited = false;
-
-    try {
-      await _firestore.runTransaction((txn) async {
-        final txRef = _firestore.collection('transactions').doc(transaction.id);
-        final txDoc = await txn.get(txRef);
-        if (!txDoc.exists) throw Exception('Transaction not found');
-
-        final txData = txDoc.data() as Map<String, dynamic>;
-
-        // Atomic check - if already credited inside transaction, abort
-        if (txData['creditIssued'] == true) {
-          alreadyCredited = true;
-          return;
-        }
-
-        final expiresAt = (txData['expiresAt'] as Timestamp?)?.toDate();
-        if (expiresAt != null && DateTime.now().isAfter(expiresAt)) {
-          throw Exception('expired');
-        }
-
-        final userRef = _firestore.collection('users').doc(transaction.userId);
-
-        txn.update(txRef, {
-          'status': TransactionStatus.confirmed,
-          'actualAmountReceived': actualAmountReceived,
-          'creditIssued': true,
-          'confirmedAt': FieldValue.serverTimestamp(),
-        });
-
-        txn.update(userRef, {
-          'walletBalance': FieldValue.increment(actualAmountReceived),
-        });
-      });
-
-      if (alreadyCredited) {
-        return {
-          'success': false,
-          'message': 'Already credited. Cannot confirm twice.'
-        };
-      }
-
-      return {
-        'success': true,
-        'message':
-            '${_fmt(actualAmountReceived)} UGX credited to ${transaction.userName}\'s wallet',
-      };
-    } catch (e) {
-      if (e.toString().contains('expired')) {
-        return {
-          'success': false,
-          'message': 'This deposit request has expired.'
-        };
-      }
-      return {'success': false, 'message': 'Failed: $e'};
-    }
-  }
-
-  Future<void> rejectDeposit(String transactionId) async {
-    await _firestore.collection('transactions').doc(transactionId).update({
-      'status': TransactionStatus.rejected,
-      'rejectedAt': FieldValue.serverTimestamp(),
+        .map((snapshot) {
+      final list = snapshot.docs
+          .map((doc) => WalletTransactionModel.fromFirestore(doc))
+          .toList();
+      list.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      return list;
     });
   }
 
-  // ── BETTING ──────────────────────────────────────────────────────────────
+  // ---------------------------------------------------------------------
+  // DEPOSITS
+  // ---------------------------------------------------------------------
 
-  // Place bet using admin-set fixed odds
-  Future<Map<String, dynamic>> placeBet({
+  // Step 1 of a deposit - user says "I've sent the money". This does NOT
+  // touch the wallet balance yet. It only creates a pending record for
+  // the admin to check against their own mobile money.
+  Future<Map<String, dynamic>> requestDeposit({
     required String userId,
     required String userName,
-    required String userMomoNumber,
-    required String matchId,
-    required String matchName,
-    required String betTeam,
-    required String betTeamName,
-    required int amount,
+    required double amount,
+    String? momoNumber,
+    String? reference,
   }) async {
     try {
-      if (amount < minimumBet) {
-        return {'success': false, 'message': 'Minimum bet is $minimumBet UGX'};
-      }
-      if (amount > maximumBet) {
-        return {
-          'success': false,
-          'message': 'Maximum bet is ${_fmt(maximumBet)} UGX'
-        };
+      if (amount <= 0) {
+        return {'success': false, 'message': 'Enter a valid amount'};
       }
 
-      final matchDoc =
-          await _firestore.collection('matches').doc(matchId).get();
-      if (!matchDoc.exists) {
-        return {'success': false, 'message': 'Match not found'};
-      }
+      final txn = WalletTransactionModel(
+        id: '',
+        userId: userId,
+        userName: userName,
+        type: TransactionType.deposit,
+        amount: amount,
+        momoNumber: momoNumber,
+        reference: reference,
+        status: TransactionStatus.pending,
+        createdAt: DateTime.now(),
+      );
 
-      final matchData = matchDoc.data() as Map<String, dynamic>;
-
-      // Check betting window
-      final matchDate = (matchData['matchDate'] as Timestamp?)?.toDate();
-      if (matchDate != null) {
-        final bettingDeadline =
-            matchDate.add(const Duration(minutes: bettingWindowMinutes));
-        if (DateTime.now().isAfter(bettingDeadline)) {
-          return {
-            'success': false,
-            'message':
-                'Betting is closed. Only allowed before kick-off and first 10 minutes.'
-          };
-        }
-      }
-
-      if (matchData['status'] == 'completed' ||
-          matchData['status'] == 'cancelled') {
-        return {'success': false, 'message': 'This match is already settled.'};
-      }
-      if (matchData['isFrozen'] == true) {
-        return {
-          'success': false,
-          'message': 'Betting on this match has been suspended by admin.'
-        };
-      }
-      if (matchData['winnersDistributed'] == true) {
-        return {
-          'success': false,
-          'message': 'This match has already been paid out.'
-        };
-      }
-
-      // One bet per match
-      final existingBet = await _firestore
-          .collection('transactions')
-          .where('userId', isEqualTo: userId)
-          .where('matchId', isEqualTo: matchId)
-          .where('type', isEqualTo: TransactionType.bet)
-          .get();
-
-      if (existingBet.docs.isNotEmpty) {
-        return {
-          'success': false,
-          'message': 'You have already placed a bet on this match.'
-        };
-      }
-
-      // Admin cannot bet
-      final userDoc = await _firestore.collection('users').doc(userId).get();
-      if (!userDoc.exists) {
-        return {'success': false, 'message': 'User not found'};
-      }
-      final userData = userDoc.data() as Map<String, dynamic>;
-      if (userData['isAdmin'] == true) {
-        return {
-          'success': false,
-          'message': 'Admin accounts cannot place bets.'
-        };
-      }
-
-      // Check available balance
-      final total = (userData['walletBalance'] ?? 0) as int;
-      final locked = (userData['lockedBalance'] ?? 0) as int;
-      final available = total - locked;
-      if (available < amount) {
-        return {
-          'success': false,
-          'message': 'Insufficient balance. Available: ${_fmt(available)} UGX'
-        };
-      }
-
-      // Get admin-set odds for this bet
-      final double oddsAtPlacement = betTeam == 'A'
-          ? (matchData['oddsA'] ?? 1.5).toDouble()
-          : (matchData['oddsB'] ?? 2.0).toDouble();
-
-      // Potential winnings = bet amount × odds
-      final int potentialWinnings = (amount * oddsAtPlacement).floor();
-      final String reference = _generateReference(userName);
-
-      await _firestore.runTransaction((txn) async {
-        final userRef = _firestore.collection('users').doc(userId);
-        final matchRef = _firestore.collection('matches').doc(matchId);
-        final betRef = _firestore.collection('transactions').doc();
-
-        txn.set(betRef, {
-          'userId': userId,
-          'userName': userName,
-          'userMomoNumber': userMomoNumber,
-          'type': TransactionType.bet,
-          'amount': amount,
-          'fee': 0,
-          'netAmount': amount,
-          'status': TransactionStatus.confirmed,
-          'reference': reference,
-          'description': 'Bet on $betTeamName in $matchName',
-          'matchId': matchId,
-          'betTeam': betTeam,
-          'oddsAtPlacement': oddsAtPlacement,
-          'potentialWinnings': potentialWinnings,
-          'creditIssued': false,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-
-        txn.update(userRef, {
-          'walletBalance': FieldValue.increment(-amount),
-        });
-
-        txn.update(matchRef, {
-          'bets.$userId': {
-            'userName': userName,
-            'userMomoNumber': userMomoNumber,
-            'team': betTeam,
-            'teamName': betTeamName,
-            'amount': amount,
-            'oddsAtPlacement': oddsAtPlacement,
-            'potentialWinnings': potentialWinnings,
-          },
-          'totalPool': FieldValue.increment(amount),
-          'votedBy': FieldValue.arrayUnion([userId]),
-          'userVotes.$userId': betTeam,
-          if (betTeam == 'A') 'votesA': FieldValue.increment(1),
-          if (betTeam == 'B') 'votesB': FieldValue.increment(1),
-          if (betTeam == 'A') 'poolA': FieldValue.increment(amount),
-          if (betTeam == 'B') 'poolB': FieldValue.increment(amount),
-        });
-      });
-
-      // Create bet document in bets collection after transaction succeeds
-      try {
-        await _firestore.collection('bets').add({
-          'userId': userId,
-          'userName': userName,
-          'userMomoNumber': userMomoNumber,
-          'matchId': matchId,
-          'matchName': matchName,
-          'betTeam': betTeam,
-          'betTeamName': betTeamName,
-          'amount': amount,
-          'oddsAtPlacement': oddsAtPlacement,
-          'potentialWinnings': potentialWinnings,
-          'status': 'pending',
-          'reference': reference,
-          'description': 'Bet on $betTeamName in $matchName',
-          'createdAt': FieldValue.serverTimestamp(),
-          'settledAt': null,
-          'settledBy': null,
-        });
-      } catch (e) {
-        // Bet doc creation failed but wallet transaction succeeded
-        // User can still see bet in transaction history
-      }
+      await _firestore.collection(_transactionsCollection).add(txn.toMap());
 
       return {
         'success': true,
         'message':
-            'Bet placed! ${_fmt(amount)} UGX deducted.\nOdds: ${oddsAtPlacement.toStringAsFixed(2)}x | If you win: ${_fmt(potentialWinnings)} UGX',
-        'odds': oddsAtPlacement,
-        'potentialWinnings': potentialWinnings,
-        'reference': reference,
+            'Deposit request submitted. The admin will confirm it once they receive your payment.',
       };
     } catch (e) {
-      return {'success': false, 'message': 'Failed to place bet: $e'};
+      return {'success': false, 'message': 'Failed to submit deposit: $e'};
     }
   }
 
-  // Distribute winnings using fixed odds stored on each bet
-  Future<Map<String, dynamic>> distributeWinnings({
-    required String matchId,
-    required String winnerTeam,
-    required String adminId,
-    required String confirmationText,
-  }) async {
-    try {
-      if (confirmationText.trim() != matchId.trim()) {
-        return {
-          'success': false,
-          'message': 'Confirmation failed. Type the exact match ID.'
-        };
-      }
-
-      final matchDoc =
-          await _firestore.collection('matches').doc(matchId).get();
-      if (!matchDoc.exists) {
-        return {'success': false, 'message': 'Match not found'};
-      }
-
-      final matchData = matchDoc.data() as Map<String, dynamic>;
-
-      if (matchData['winnersDistributed'] == true) {
-        return {
-          'success': false,
-          'message': 'Winnings already distributed for this match.'
-        };
-      }
-
-      final Map<String, dynamic> bets =
-          Map<String, dynamic>.from(matchData['bets'] ?? {});
-      if (bets.isEmpty) {
-        return {'success': false, 'message': 'No bets on this match'};
-      }
-
-      if (winnerTeam == 'CANCELLED') {
-        return await _refundAllBets(
-            matchId: matchId, bets: bets, adminId: adminId);
-      }
-
-      final WriteBatch batch = _firestore.batch();
-      final List<Map<String, dynamic>> receiptLines = [];
-      final withdrawableAfter =
-          DateTime.now().add(const Duration(hours: winningsHoldHours));
-
-      final allMatchBets = await _firestore
-          .collection('bets')
-          .where('matchId', isEqualTo: matchId)
-          .get();
-
-      // Pay winners based on their fixed odds at placement time
-      bets.forEach((userId, betData) {
-        if (betData['team'] == winnerTeam) {
-          final int winnings = (betData['potentialWinnings'] as int? ?? 0);
-
-          final userRef = _firestore.collection('users').doc(userId);
-          batch.update(userRef, {
-            'walletBalance': FieldValue.increment(winnings),
-          });
-
-          final winRef = _firestore.collection('transactions').doc();
-          batch.set(winRef, {
-            'userId': userId,
-            'userName': betData['userName'],
-            'userMomoNumber': betData['userMomoNumber'],
-            'type': TransactionType.winnings,
-            'amount': winnings,
-            'fee': 0,
-            'netAmount': winnings,
-            'status': TransactionStatus.confirmed,
-            'reference': 'WIN-${matchId.substring(0, 6)}',
-            'description':
-                'Match winnings at ${betData['oddsAtPlacement']}x odds',
-            'matchId': matchId,
-            'betTeam': winnerTeam,
-            'creditIssued': true,
-            'withdrawableAfter': Timestamp.fromDate(withdrawableAfter),
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-
-          receiptLines.add({
-            'userName': betData['userName'],
-            'momoNumber': betData['userMomoNumber'],
-            'betAmount': betData['amount'],
-            'odds': betData['oddsAtPlacement'],
-            'winnings': winnings,
-            'team': betData['teamName'] ?? winnerTeam,
-          });
-        }
-      });
-
-      // Update bet statuses in bets collection
-      for (final betDoc in allMatchBets.docs) {
-        final betTeam = betDoc.data()['betTeam'] ?? '';
-        final newStatus = betTeam == winnerTeam ? 'won' : 'lost';
-        batch.update(betDoc.reference, {
-          'status': newStatus,
-          'settledAt': FieldValue.serverTimestamp(),
-          'settledBy': adminId,
-        });
-      }
-
-      final matchRef = _firestore.collection('matches').doc(matchId);
-      batch.update(matchRef, {
-        'winnersDistributed': true,
-        'winnerTeam': winnerTeam,
-        'distributedAt': FieldValue.serverTimestamp(),
-        'distributedBy': adminId,
-        'distributionReceipt': receiptLines,
-        'status': 'completed',
-      });
-
-      await batch.commit();
-
-      final int totalWinnersPaid =
-          receiptLines.fold(0, (sum, r) => sum + (r['winnings'] as int));
-      final int totalPool = matchData['totalPool'] ?? 0;
-      final int adminProfit = totalPool - totalWinnersPaid;
-
-      final summary = receiptLines
-          .map((r) =>
-              '${r['userName']} (${r['momoNumber']}): ${_fmt(r['winnings'] as int)} UGX')
-          .join('\n');
-
-      return {
-        'success': true,
-        'message':
-            'Done! ${receiptLines.length} winners paid.\n$summary\n\nTotal collected: ${_fmt(totalPool)} UGX\nTotal paid out: ${_fmt(totalWinnersPaid)} UGX\nYour profit: ${_fmt(adminProfit)} UGX',
-        'receipt': receiptLines,
-        'adminProfit': adminProfit,
-      };
-    } catch (e) {
-      return {
-        'success': false,
-        'message': 'Distribution failed: $e. No money moved.'
-      };
-    }
-  }
-
-  Future<Map<String, dynamic>> _refundAllBets({
-    required String matchId,
-    required Map<String, dynamic> bets,
+  // Step 2 of a deposit - admin has checked their own mobile money and
+  // confirms it arrived. This is the ONLY place a deposit ever credits
+  // the wallet, and it happens atomically with marking the request
+  // confirmed so the two can never drift apart.
+  Future<Map<String, dynamic>> confirmDeposit({
+    required String transactionId,
     required String adminId,
   }) async {
     try {
-      final WriteBatch batch = _firestore.batch();
+      final txnRef =
+          _firestore.collection(_transactionsCollection).doc(transactionId);
 
-      final allMatchBets = await _firestore
-          .collection('bets')
-          .where('matchId', isEqualTo: matchId)
-          .get();
+      await _firestore.runTransaction((transaction) async {
+        final txnSnap = await transaction.get(txnRef);
+        if (!txnSnap.exists) {
+          throw Exception('Transaction not found');
+        }
+        final txnData = txnSnap.data() as Map<String, dynamic>;
 
-      bets.forEach((userId, betData) {
-        final userRef = _firestore.collection('users').doc(userId);
-        batch.update(userRef,
-            {'walletBalance': FieldValue.increment(betData['amount'] as int)});
+        if (txnData['status'] != TransactionStatus.pending) {
+          throw Exception('This deposit has already been actioned');
+        }
 
-        final refundRef = _firestore.collection('transactions').doc();
-        batch.set(refundRef, {
-          'userId': userId,
-          'userName': betData['userName'],
-          'userMomoNumber': betData['userMomoNumber'],
-          'type': TransactionType.refund,
-          'amount': betData['amount'],
-          'fee': 0,
-          'netAmount': betData['amount'],
+        final String userId = txnData['userId'];
+        final double amount = (txnData['amount'] ?? 0).toDouble();
+        final userRef = _firestore.collection(_usersCollection).doc(userId);
+
+        // Read the user doc too - all reads must happen before any writes
+        // inside a Firestore transaction.
+        await transaction.get(userRef);
+
+        transaction.update(txnRef, {
           'status': TransactionStatus.confirmed,
-          'reference': 'REFUND-${matchId.substring(0, 6)}',
-          'description': 'Full refund - match cancelled',
-          'matchId': matchId,
-          'betTeam': betData['team'],
-          'creditIssued': true,
-          'createdAt': FieldValue.serverTimestamp(),
+          'confirmedAt': FieldValue.serverTimestamp(),
+          'confirmedBy': adminId,
         });
+
+        // SetOptions(merge: true) means this also works for a user doc
+        // that has never had a walletBalance field before - it gets
+        // created instead of throwing.
+        transaction.set(
+          userRef,
+          {'walletBalance': FieldValue.increment(amount)},
+          SetOptions(merge: true),
+        );
       });
-
-      for (final betDoc in allMatchBets.docs) {
-        batch.update(betDoc.reference, {
-          'status': 'refunded',
-          'settledAt': FieldValue.serverTimestamp(),
-          'settledBy': adminId,
-        });
-      }
-
-      final matchRef = _firestore.collection('matches').doc(matchId);
-      batch.update(matchRef, {
-        'winnersDistributed': true,
-        'winnerTeam': 'CANCELLED',
-        'status': 'cancelled',
-        'distributedAt': FieldValue.serverTimestamp(),
-      });
-
-      await batch.commit();
 
       return {
         'success': true,
-        'message':
-            'Match cancelled. Full refunds issued to all ${bets.length} bettors.'
+        'message': 'Deposit confirmed and wallet topped up'
       };
     } catch (e) {
-      return {'success': false, 'message': 'Refund failed: $e'};
+      return {'success': false, 'message': 'Failed to confirm deposit: $e'};
     }
   }
 
-  // ── WITHDRAWAL ───────────────────────────────────────────────────────────
+  // Admin rejects a deposit (e.g. money never actually arrived)
+  Future<Map<String, dynamic>> rejectDeposit({
+    required String transactionId,
+    required String adminId,
+  }) async {
+    try {
+      await _firestore
+          .collection(_transactionsCollection)
+          .doc(transactionId)
+          .update({
+        'status': TransactionStatus.rejected,
+        'confirmedAt': FieldValue.serverTimestamp(),
+        'confirmedBy': adminId,
+      });
+      return {'success': true, 'message': 'Deposit rejected'};
+    } catch (e) {
+      return {'success': false, 'message': 'Failed to reject deposit: $e'};
+    }
+  }
 
+  // ---------------------------------------------------------------------
+  // WITHDRAWALS
+  // ---------------------------------------------------------------------
+
+  // Step 1 of a withdrawal - user requests a payout. The requested amount
+  // is moved out of walletBalance into pendingWithdrawal IMMEDIATELY (in
+  // the same transaction as creating the request) so the user can't spend
+  // or double-withdraw money that's already promised out.
   Future<Map<String, dynamic>> requestWithdrawal({
     required String userId,
     required String userName,
-    required String userMomoNumber,
-    required int amount,
+    required double amount,
+    String? momoNumber,
   }) async {
     try {
-      if (!isValidMomoNumber(userMomoNumber)) {
-        return {
-          'success': false,
-          'message': 'Invalid MoMo number. Enter a valid Uganda number.'
-        };
-      }
       if (amount < minimumWithdrawal) {
         return {
           'success': false,
-          'message': 'Minimum withdrawal is ${_fmt(minimumWithdrawal)} UGX'
+          'message': 'Minimum withdrawal is UGX ${minimumWithdrawal.toInt()}'
         };
       }
-
-      // Daily limit - client side
-      final allWithdrawals = await _firestore
-          .collection('transactions')
-          .where('userId', isEqualTo: userId)
-          .where('type', isEqualTo: TransactionType.withdrawal)
-          .get();
-
-      final todayStart = DateTime(
-          DateTime.now().year, DateTime.now().month, DateTime.now().day);
-      int todayTotal = 0;
-      for (final doc in allWithdrawals.docs) {
-        final data = doc.data();
-        final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
-        if (createdAt != null && createdAt.isAfter(todayStart)) {
-          todayTotal += (data['amount'] as int? ?? 0);
-        }
-      }
-      if (todayTotal + amount > maximumWithdrawalPerDay) {
+      if (momoNumber == null || momoNumber.trim().isEmpty) {
         return {
           'success': false,
-          'message':
-              'Daily limit is ${_fmt(maximumWithdrawalPerDay)} UGX. Used ${_fmt(todayTotal)} UGX today.'
+          'message': 'Enter the mobile money number to receive your payout'
         };
       }
 
-      // 24h hold on winnings
-      final winnings = await _firestore
-          .collection('transactions')
-          .where('userId', isEqualTo: userId)
-          .where('type', isEqualTo: TransactionType.winnings)
-          .get();
+      final userRef = _firestore.collection(_usersCollection).doc(userId);
+      final txnRef = _firestore.collection(_transactionsCollection).doc();
+      final double netAmountToSend = amount * (1 - withdrawalChargeRate);
 
-      for (final doc in winnings.docs) {
-        final data = doc.data();
-        final withdrawableAfter =
-            (data['withdrawableAfter'] as Timestamp?)?.toDate();
-        if (withdrawableAfter != null &&
-            DateTime.now().isBefore(withdrawableAfter)) {
-          final hoursLeft =
-              withdrawableAfter.difference(DateTime.now()).inHours;
-          return {
-            'success': false,
-            'message':
-                'Winnings under 24h security hold. Available in ${hoursLeft}h.'
-          };
+      await _firestore.runTransaction((transaction) async {
+        final userSnap = await transaction.get(userRef);
+        final double currentBalance = userSnap.exists
+            ? ((userSnap.data() as Map<String, dynamic>)['walletBalance'] ?? 0)
+                .toDouble()
+            : 0.0;
+
+        if (currentBalance < amount) {
+          throw Exception('Insufficient wallet balance');
         }
-      }
 
-      // Check available balance
-      final userDoc = await _firestore.collection('users').doc(userId).get();
-      if (!userDoc.exists) {
-        return {'success': false, 'message': 'User not found'};
-      }
-      final userData = userDoc.data() as Map<String, dynamic>;
-      final total = (userData['walletBalance'] ?? 0) as int;
-      final locked = (userData['lockedBalance'] ?? 0) as int;
-      final available = total - locked;
-      if (available < amount) {
-        return {
-          'success': false,
-          'message': 'Insufficient balance. Available: ${_fmt(available)} UGX'
-        };
-      }
+        transaction.set(
+          userRef,
+          {
+            'walletBalance': FieldValue.increment(-amount),
+            'pendingWithdrawal': FieldValue.increment(amount),
+          },
+          SetOptions(merge: true),
+        );
 
-      final int fee = (amount * withdrawalFeePercent).floor();
-      final int netAmount = amount - fee;
-
-      await _firestore.runTransaction((txn) async {
-        final userRef = _firestore.collection('users').doc(userId);
-        final withdrawRef = _firestore.collection('transactions').doc();
-
-        txn.update(userRef, {
-          'walletBalance': FieldValue.increment(-amount),
-          'lockedBalance': FieldValue.increment(amount),
-        });
-
-        txn.set(withdrawRef, {
+        transaction.set(txnRef, {
           'userId': userId,
           'userName': userName,
-          'userMomoNumber': userMomoNumber,
           'type': TransactionType.withdrawal,
           'amount': amount,
-          'fee': fee,
-          'netAmount': netAmount,
+          'netAmountToSend': netAmountToSend,
+          'momoNumber': momoNumber,
+          'reference': null,
           'status': TransactionStatus.pending,
-          'reference': _generateReference(userName),
-          'description': 'Withdrawal to $userMomoNumber',
-          'matchId': '',
-          'betTeam': '',
-          'creditIssued': false,
           'createdAt': FieldValue.serverTimestamp(),
+          'confirmedAt': null,
+          'confirmedBy': null,
         });
       });
 
       return {
         'success': true,
         'message':
-            'Withdrawal requested!\nAmount: ${_fmt(amount)} UGX\nFee (12%): ${_fmt(fee)} UGX\nYou receive: ${_fmt(netAmount)} UGX to $userMomoNumber within 24h.',
-        'fee': fee,
-        'netAmount': netAmount,
+            'Withdrawal requested. You will receive UGX ${netAmountToSend.toInt()} after the 12% charge, once the admin sends it.',
       };
     } catch (e) {
-      return {'success': false, 'message': 'Failed: $e'};
+      return {'success': false, 'message': 'Failed to request withdrawal: $e'};
     }
   }
 
-  Future<void> confirmWithdrawal(WalletTransaction transaction) async {
-    await _firestore.runTransaction((txn) async {
-      final txRef = _firestore.collection('transactions').doc(transaction.id);
-      final userRef = _firestore.collection('users').doc(transaction.userId);
-      txn.update(txRef, {
-        'status': TransactionStatus.confirmed,
-        'confirmedAt': FieldValue.serverTimestamp()
-      });
-      txn.update(userRef,
-          {'lockedBalance': FieldValue.increment(-transaction.amount)});
-    });
-  }
-
-  Future<void> rejectWithdrawal(WalletTransaction transaction) async {
-    await _firestore.runTransaction((txn) async {
-      final txRef = _firestore.collection('transactions').doc(transaction.id);
-      final userRef = _firestore.collection('users').doc(transaction.userId);
-      txn.update(txRef, {'status': TransactionStatus.rejected});
-      txn.update(userRef, {
-        'walletBalance': FieldValue.increment(transaction.amount),
-        'lockedBalance': FieldValue.increment(-transaction.amount),
-      });
-    });
-  }
-
-  // Get admin odds for a match (used in bet dialog)
-  Future<Map<String, double>> getMatchOdds(String matchId) async {
+  // Step 2 of a withdrawal - admin has manually sent the money from their
+  // own phone and confirms it. The amount already left walletBalance at
+  // request time, so this only clears it out of pendingWithdrawal.
+  Future<Map<String, dynamic>> confirmWithdrawal({
+    required String transactionId,
+    required String adminId,
+  }) async {
     try {
-      final doc = await _firestore.collection('matches').doc(matchId).get();
-      if (!doc.exists) return {'A': 1.5, 'B': 2.0};
-      final data = doc.data() as Map<String, dynamic>;
-      return {
-        'A': (data['oddsA'] ?? 1.5).toDouble(),
-        'B': (data['oddsB'] ?? 2.0).toDouble(),
-      };
-    } catch (e) {
-      return {'A': 1.5, 'B': 2.0};
-    }
-  }
+      final txnRef =
+          _firestore.collection(_transactionsCollection).doc(transactionId);
 
-  // Get bets summary for a match - used in admin accountability dashboard
-  Future<Map<String, dynamic>> getMatchBetsSummary(String matchId) async {
-    try {
-      final doc = await _firestore.collection('matches').doc(matchId).get();
-      if (!doc.exists) return {};
-      final data = doc.data() as Map<String, dynamic>;
-      final bets = Map<String, dynamic>.from(data['bets'] ?? {});
-      final int totalPool = data['totalPool'] ?? 0;
-      final int poolA = data['poolA'] ?? 0;
-      final int poolB = data['poolB'] ?? 0;
-      final double oddsA = (data['oddsA'] ?? 1.5).toDouble();
-      final double oddsB = (data['oddsB'] ?? 2.0).toDouble();
-
-      // Calculate total liability if Team A wins
-      int liabilityA = 0;
-      int liabilityB = 0;
-      bets.forEach((userId, betData) {
-        if (betData['team'] == 'A') {
-          liabilityA += (betData['potentialWinnings'] as int? ?? 0);
-        } else {
-          liabilityB += (betData['potentialWinnings'] as int? ?? 0);
+      await _firestore.runTransaction((transaction) async {
+        final txnSnap = await transaction.get(txnRef);
+        if (!txnSnap.exists) {
+          throw Exception('Transaction not found');
         }
+        final txnData = txnSnap.data() as Map<String, dynamic>;
+
+        if (txnData['status'] != TransactionStatus.pending) {
+          throw Exception('This withdrawal has already been actioned');
+        }
+
+        final String userId = txnData['userId'];
+        final double amount = (txnData['amount'] ?? 0).toDouble();
+        final userRef = _firestore.collection(_usersCollection).doc(userId);
+
+        await transaction.get(userRef);
+
+        transaction.update(txnRef, {
+          'status': TransactionStatus.confirmed,
+          'confirmedAt': FieldValue.serverTimestamp(),
+          'confirmedBy': adminId,
+        });
+
+        transaction.set(
+          userRef,
+          {'pendingWithdrawal': FieldValue.increment(-amount)},
+          SetOptions(merge: true),
+        );
+      });
+
+      return {'success': true, 'message': 'Withdrawal confirmed as paid'};
+    } catch (e) {
+      return {'success': false, 'message': 'Failed to confirm withdrawal: $e'};
+    }
+  }
+
+  // Admin rejects a withdrawal (e.g. wrong number given) - refunds the
+  // held amount back into the user's spendable balance.
+  Future<Map<String, dynamic>> rejectWithdrawal({
+    required String transactionId,
+    required String adminId,
+  }) async {
+    try {
+      final txnRef =
+          _firestore.collection(_transactionsCollection).doc(transactionId);
+
+      await _firestore.runTransaction((transaction) async {
+        final txnSnap = await transaction.get(txnRef);
+        if (!txnSnap.exists) {
+          throw Exception('Transaction not found');
+        }
+        final txnData = txnSnap.data() as Map<String, dynamic>;
+
+        if (txnData['status'] != TransactionStatus.pending) {
+          throw Exception('This withdrawal has already been actioned');
+        }
+
+        final String userId = txnData['userId'];
+        final double amount = (txnData['amount'] ?? 0).toDouble();
+        final userRef = _firestore.collection(_usersCollection).doc(userId);
+
+        await transaction.get(userRef);
+
+        transaction.update(txnRef, {
+          'status': TransactionStatus.rejected,
+          'confirmedAt': FieldValue.serverTimestamp(),
+          'confirmedBy': adminId,
+        });
+
+        transaction.set(
+          userRef,
+          {
+            'pendingWithdrawal': FieldValue.increment(-amount),
+            'walletBalance': FieldValue.increment(amount),
+          },
+          SetOptions(merge: true),
+        );
       });
 
       return {
-        'bets': bets,
-        'totalPool': totalPool,
-        'poolA': poolA,
-        'poolB': poolB,
-        'oddsA': oddsA,
-        'oddsB': oddsB,
-        'totalBettors': bets.length,
-        'bettorsA': bets.values.where((b) => b['team'] == 'A').length,
-        'bettorsB': bets.values.where((b) => b['team'] == 'B').length,
-        'liabilityIfAWins': liabilityA,
-        'liabilityIfBWins': liabilityB,
-        'profitIfAWins': totalPool - liabilityA,
-        'profitIfBWins': totalPool - liabilityB,
+        'success': true,
+        'message': 'Withdrawal rejected and refunded to wallet'
       };
     } catch (e) {
-      return {};
+      return {'success': false, 'message': 'Failed to reject withdrawal: $e'};
     }
-  }
-
-  Future<Map<String, int>> getUserBetSummary(String userId) async {
-    try {
-      final snapshot = await _firestore
-          .collection('bets')
-          .where('userId', isEqualTo: userId)
-          .get();
-
-      int active = 0;
-      int won = 0;
-      int lost = 0;
-
-      for (final doc in snapshot.docs) {
-        final status = doc.data()['status'] ?? 'pending';
-        if (status == 'pending') active++;
-        if (status == 'won') won++;
-        if (status == 'lost') lost++;
-      }
-
-      return {
-        'active': active,
-        'won': won,
-        'lost': lost,
-      };
-    } catch (e) {
-      return {'active': 0, 'won': 0, 'lost': 0};
-    }
-  }
-
-  Future<Map<String, dynamic>> syncUserBets(String userId) async {
-    try {
-      final betTransactions = await _firestore
-          .collection('transactions')
-          .where('userId', isEqualTo: userId)
-          .where('type', isEqualTo: TransactionType.bet)
-          .get();
-
-      int synced = 0;
-      for (final txDoc in betTransactions.docs) {
-        final txData = txDoc.data();
-        final matchId = txData['matchId'] ?? '';
-        if (matchId.isEmpty) continue;
-
-        final existing = await _firestore
-            .collection('bets')
-            .where('userId', isEqualTo: userId)
-            .where('matchId', isEqualTo: matchId)
-            .limit(1)
-            .get();
-
-        if (existing.docs.isEmpty) {
-          await _firestore.collection('bets').add({
-            'userId': txData['userId'],
-            'userName': txData['userName'],
-            'userMomoNumber': txData['userMomoNumber'],
-            'matchId': matchId,
-            'matchName': txData['description'] ?? '',
-            'betTeam': txData['betTeam'] ?? '',
-            'betTeamName': txData['betTeam'] ?? '',
-            'amount': txData['amount'],
-            'oddsAtPlacement': txData['oddsAtPlacement'] ?? 1.5,
-            'potentialWinnings': txData['potentialWinnings'] ?? 0,
-            'status': 'pending',
-            'reference': txData['reference'],
-            'description': txData['description'],
-            'createdAt': txData['createdAt'],
-            'settledAt': null,
-            'settledBy': null,
-          });
-          synced++;
-        }
-      }
-
-      return {'success': true, 'synced': synced};
-    } catch (e) {
-      return {'success': false, 'message': 'Sync failed: $e'};
-    }
-  }
-
-  String _fmt(int amount) {
-    return formatCurrency(amount);
   }
 }

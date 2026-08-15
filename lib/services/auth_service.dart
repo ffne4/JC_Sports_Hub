@@ -54,24 +54,16 @@ class AuthService {
         name: fullName,
       );
 
-      if (otpResult['success']) {
-        return {
-          'success': true,
-          'message':
-              'Account created! Check your email for the verification code.',
-          'userId': user.uid,
-          'email': email,
-          'name': fullName,
-        };
-      } else {
-        return {
-          'success': true,
-          'message': 'Account created but email failed. Use resend option.',
-          'userId': user.uid,
-          'email': email,
-          'name': fullName,
-        };
-      }
+      return {
+        'success': true,
+        'otpSent': otpResult['success'] == true,
+        'message': otpResult['success'] == true
+            ? 'Account created! Check your email for the verification code.'
+            : 'Account created. Verification email could not be delivered yet. Please use Resend Code on the next screen.',
+        'userId': user.uid,
+        'email': email,
+        'name': fullName,
+      };
     } on FirebaseAuthException catch (e) {
       String message = _getAuthErrorMessage(e.code);
       return {'success': false, 'message': message};

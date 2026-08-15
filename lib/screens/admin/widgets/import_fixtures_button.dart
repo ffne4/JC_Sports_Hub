@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../services/match_service.dart';
 import '../../../data/inter_clan_fixture_seed.dart';
 import '../../../utils/constants.dart';

@@ -120,7 +120,7 @@ class _MatchAdminCardState extends State<MatchAdminCard> {
                         borderRadius: BorderRadius.circular(8))),
               )),
               const SizedBox(width: 8),
-              ElevatedButton(
+              ElevatedButton.icon(
                 onPressed: () async {
                   final a = double.tryParse(_oddsAController.text) ??
                       widget.match.oddsA;

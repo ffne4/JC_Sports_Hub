@@ -103,12 +103,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 16),
                   // WALLET BALANCE
-                  StreamBuilder<int>(
+                  StreamBuilder<double>(
                     stream: _currentUserId != null
-                        ? _walletService.getBalanceStream(_currentUserId!)
+                        ? _walletService.getWalletBalance(_currentUserId!)
                         : const Stream.empty(),
                     builder: (context, snapshot) {
-                      final balance = snapshot.data ?? 0;
+                      final balance = snapshot.data ?? 0.0;
                       return Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(16),
@@ -135,7 +135,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 const Text('Wallet Balance',
                                     style: TextStyle(color: Colors.grey, fontSize: AppSizes.fontSmall)),
                                 Text(
-                                  '${_formatAmount(balance)} UGX',
+                                  '${_formatAmount(balance.toInt())} UGX',
                                   style: const TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: AppSizes.fontLarge,

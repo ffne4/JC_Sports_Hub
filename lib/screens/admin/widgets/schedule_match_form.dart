@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../services/match_service.dart';
 import '../../../utils/constants.dart';
-import '../../../models/match_model.dart';
 
 class ScheduleMatchForm extends StatefulWidget {
   const ScheduleMatchForm({super.key});
@@ -225,8 +224,8 @@ class _ScheduleMatchFormState extends State<ScheduleMatchForm> {
           ),
         ),
       ],
-    ),
   );
+}
 
   Future<void> _scheduleMatch() async {
     if (_teamAController.text.trim().isEmpty ||

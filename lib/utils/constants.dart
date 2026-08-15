@@ -46,6 +46,11 @@ class AppStrings {
 
   // Webmail domain for bachelor students
   static const String bachelorDomain = '@students.mak.ac.ug';
+
+  // Mobile money number shown to users when depositing into their wallet.
+  // Money is sent here manually, outside the app - change to your real number.
+  static const String adminMomoNumber = '0768658988';
+  static const String adminMomoName = 'Drake Wanswa';
 }
 
 class AppSizes {

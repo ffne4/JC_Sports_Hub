@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server.dart';
 import '../../utils/secrets.dart';
@@ -73,9 +74,9 @@ Do not share this code with anyone.
       final sendReport = await send(message, _smtpServer);
 
       // Print for debugging - visible in VS Code terminal
-      print('===== Email Sent =====');
-      print('Message sent: ${sendReport.toString()}');
-      print('=======================');
+      debugPrint('===== Email Sent =====');
+      debugPrint('Message sent: ${sendReport.toString()}');
+      debugPrint('=======================');
 
       return {
         'success': true,
@@ -84,11 +85,11 @@ Do not share this code with anyone.
     } on MailerException catch (e) {
       // MailerException is thrown specifically when SMTP sending fails
       // e.problems contains a list of specific issues (auth failure, connection issue etc)
-      print('===== Mailer Exception =====');
+      debugPrint('===== Mailer Exception =====');
       for (var p in e.problems) {
-        print('Problem: ${p.code} - ${p.msg}');
+        debugPrint('Problem: ${p.code} - ${p.msg}');
       }
-      print('=============================');
+      debugPrint('=============================');
 
       // Delete the OTP since email failed to send
       await _firestore.collection('otps').doc(userId).delete();
@@ -98,9 +99,9 @@ Do not share this code with anyone.
         'message': 'Failed to send email: ${e.problems.isNotEmpty ? e.problems[0].msg : e.toString()}',
       };
     } catch (e) {
-      print('===== General Exception =====');
-      print(e.toString());
-      print('==============================');
+      debugPrint('===== General Exception =====');
+      debugPrint(e.toString());
+      debugPrint('==============================');
 
       return {
         'success': false,
@@ -164,9 +165,9 @@ Do not share this code with anyone.
         'message': 'Email verified successfully!',
       };
     } catch (e) {
-      print('===== Verify OTP Exception =====');
-      print(e.toString());
-      print('================================');
+      debugPrint('===== Verify OTP Exception =====');
+      debugPrint(e.toString());
+      debugPrint('================================');
       return {
         'success': false,
         'message': 'Something went wrong. Please try again.',

@@ -1,44 +1,44 @@
 ﻿import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum BetStatus { pending, won, lost, refunded, cancelled }
+// Status a bet can be in at any point in time
+// Same pattern as MatchStatus in match_model.dart - constants instead of raw strings
+class BetStatus {
+  static const String pending = 'pending';
+  static const String won = 'won';
+  static const String lost = 'lost';
+}
 
+// Represents a single bet placed by a user on a match.
+// One BetModel = one "ticket". A user can place many bets on the same match
+// (e.g. changing their mind isn't allowed, but nothing stops a second bet).
 class BetModel {
   final String id;
   final String userId;
-  final String userName;
-  final String userMomoNumber;
+  final String userName; // saved at bet time so admin doesn't need a join
   final String matchId;
-  final String matchName;
-  final String betTeam;
-  final String betTeamName;
-  final int amount;
-  final double oddsAtPlacement;
-  final int potentialWinnings;
-  final BetStatus status;
-  final String? reference;
-  final String? description;
-  final DateTime createdAt;
+  final String matchLabel; // e.g. "Basoga Nsete vs Northerners" - for display
+  final String selection; // 'A' or 'B' - which team the user backed
+  final double stakeAmount; // how much was deducted from the wallet
+  final double odds; // odds locked in at the moment the bet was placed
+  final double
+      potentialWinnings; // stakeAmount * odds, stored, not recalculated later
+  final String status; // pending, won, lost - see BetStatus
+  final DateTime placedAt;
   final DateTime? settledAt;
-  final String? settledBy;
 
-  BetModel({
+  const BetModel({
     required this.id,
     required this.userId,
     required this.userName,
-    required this.userMomoNumber,
     required this.matchId,
-    required this.matchName,
-    required this.betTeam,
-    required this.betTeamName,
-    required this.amount,
-    required this.oddsAtPlacement,
+    required this.matchLabel,
+    required this.selection,
+    required this.stakeAmount,
+    required this.odds,
     required this.potentialWinnings,
     required this.status,
-    this.reference,
-    this.description,
-    required this.createdAt,
+    required this.placedAt,
     this.settledAt,
-    this.settledBy,
   });
 
   factory BetModel.fromFirestore(DocumentSnapshot doc) {
@@ -47,20 +47,15 @@ class BetModel {
       id: doc.id,
       userId: data['userId'] ?? '',
       userName: data['userName'] ?? '',
-      userMomoNumber: data['userMomoNumber'] ?? '',
       matchId: data['matchId'] ?? '',
-      matchName: data['description']?.split(' in ').last ?? data['matchName'] ?? '',
-      betTeam: data['betTeam'] ?? '',
-      betTeamName: data['betTeamName'] ?? '',
-      amount: data['amount'] ?? 0,
-      oddsAtPlacement: (data['oddsAtPlacement'] ?? 1.5).toDouble(),
-      potentialWinnings: data['potentialWinnings'] ?? 0,
-      status: _parseStatus(data['status']),
-      reference: data['reference'],
-      description: data['description'],
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      settledAt: data['settledAt'] != null ? (data['settledAt'] as Timestamp).toDate() : null,
-      settledBy: data['settledBy'],
+      matchLabel: data['matchLabel'] ?? '',
+      selection: data['selection'] ?? 'A',
+      stakeAmount: (data['stakeAmount'] ?? 0).toDouble(),
+      odds: (data['odds'] ?? 1).toDouble(),
+      potentialWinnings: (data['potentialWinnings'] ?? 0).toDouble(),
+      status: data['status'] ?? BetStatus.pending,
+      placedAt: (data['placedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      settledAt: (data['settledAt'] as Timestamp?)?.toDate(),
     );
   }
 
@@ -68,36 +63,15 @@ class BetModel {
     return {
       'userId': userId,
       'userName': userName,
-      'userMomoNumber': userMomoNumber,
       'matchId': matchId,
-      'matchName': matchName,
-      'betTeam': betTeam,
-      'betTeamName': betTeamName,
-      'amount': amount,
-      'oddsAtPlacement': oddsAtPlacement,
+      'matchLabel': matchLabel,
+      'selection': selection,
+      'stakeAmount': stakeAmount,
+      'odds': odds,
       'potentialWinnings': potentialWinnings,
-      'status': status.name,
-      'reference': reference,
-      'description': description,
-      'createdAt': FieldValue.serverTimestamp(),
-      'settledAt': settledAt != null ? Timestamp.fromDate(settledAt!) : null,
-      'settledBy': settledBy,
+      'status': status,
+      'placedAt': FieldValue.serverTimestamp(),
+      'settledAt': null,
     };
-  }
-
-  static BetStatus _parseStatus(String? value) {
-    switch (value) {
-      case 'won':
-        return BetStatus.won;
-      case 'lost':
-        return BetStatus.lost;
-      case 'refunded':
-        return BetStatus.refunded;
-      case 'cancelled':
-        return BetStatus.cancelled;
-      case 'pending':
-      default:
-        return BetStatus.pending;
-    }
   }
 }

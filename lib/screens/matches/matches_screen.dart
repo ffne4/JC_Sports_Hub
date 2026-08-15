@@ -3,7 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../models/match_model.dart';
 import '../../services/match_service.dart';
-import '../../services/wallet_service.dart';
+
+import '../../services/betting_service.dart';
 import '../../utils/constants.dart';
 import 'match_detail_screen.dart';
 import '../bets/bets_screen.dart';
@@ -19,6 +20,14 @@ class _MatchesScreenState extends State<MatchesScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final MatchService _matchService = MatchService();
+  // Cached once so build() doesn't re-create (and re-subscribe to) the
+  // Firestore streams on every rebuild - that pattern can freeze the screen.
+  late final Stream<List<MatchModel>> _upcomingStream =
+      _matchService.getUpcomingMatches();
+  late final Stream<List<MatchModel>> _liveStream =
+      _matchService.getLiveMatches();
+  late final Stream<List<MatchModel>> _completedStream =
+      _matchService.getCompletedMatches();
   final String? _currentUserId = FirebaseAuth.instance.currentUser?.uid;
   int _betAmount = 0;
 
@@ -58,9 +67,9 @@ class _MatchesScreenState extends State<MatchesScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildMatchList(_matchService.getUpcomingMatches(), 'upcoming'),
-          _buildMatchList(_matchService.getLiveMatches(), 'live'),
-          _buildMatchList(_matchService.getCompletedMatches(), 'completed'),
+          _buildMatchList(_upcomingStream, 'upcoming'),
+          _buildMatchList(_liveStream, 'live'),
+          _buildMatchList(_completedStream, 'completed'),
         ],
       ),
     );
@@ -587,6 +596,7 @@ class _MatchesScreenState extends State<MatchesScreen>
         .get();
 
     if (!userDoc.exists) return;
+    if (!mounted) return;
 
     final userData = userDoc.data() as Map<String, dynamic>;
 
@@ -606,14 +616,13 @@ class _MatchesScreenState extends State<MatchesScreen>
     final int locked = (userData['lockedBalance'] ?? 0) as int;
     final int balance = total - locked;
     final String userName = userData['fullName'] ?? 'User';
-    final String userMomoNumber = userData['momoNumber'] ?? '';
     final String teamName = team == 'A' ? match.teamA : match.teamB;
     final double odds = team == 'A' ? match.oddsA : match.oddsB;
 
-    if (balance < WalletService.minimumBet) {
+    if (balance < BettingService.minimumBet) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text(
-            'Insufficient balance. Need at least ${WalletService.minimumBet} UGX. Add funds in Wallet tab.'),
+            'Insufficient balance. Need at least ${BettingService.minimumBet} UGX. Add funds in Wallet tab.'),
         backgroundColor: AppColors.error,
         behavior: SnackBarBehavior.floating,
         duration: Duration(seconds: 4),
@@ -681,7 +690,7 @@ class _MatchesScreenState extends State<MatchesScreen>
                },
                decoration: InputDecoration(
                  labelText: 'Bet Amount (UGX)',
-                 hintText: 'Min ${WalletService.minimumBet} UGX',
+                 hintText: 'Min ${BettingService.minimumBet} UGX',
                  prefixIcon: const Icon(Icons.money, color: AppColors.primary),
                  filled: true,
                  fillColor: Colors.grey.shade50,
@@ -726,18 +735,18 @@ class _MatchesScreenState extends State<MatchesScreen>
             onPressed: () async {
               final amount = int.tryParse(betController.text) ?? 0;
 
-              if (amount < WalletService.minimumBet) {
+              if (amount < BettingService.minimumBet) {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                   content:
-                      Text('Minimum bet is ${WalletService.minimumBet} UGX'),
+                      Text('Minimum bet is ${BettingService.minimumBet} UGX'),
                   backgroundColor: AppColors.error,
                 ));
                 return;
               }
-              if (amount > WalletService.maximumBet) {
+              if (amount > BettingService.maximumBet) {
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                   content: Text(
-                      'Maximum bet is ${_fmtAmt(WalletService.maximumBet)} UGX'),
+                      'Maximum bet is ${_fmtAmt(BettingService.maximumBet)} UGX'),
                   backgroundColor: AppColors.error,
                 ));
                 return;
@@ -754,15 +763,13 @@ class _MatchesScreenState extends State<MatchesScreen>
 
               final potentialWin = (amount * odds).floor();
 
-              final result = await WalletService().placeBet(
+              final result = await BettingService().placeBet(
                 userId: _currentUserId!,
                 userName: userName,
-                userMomoNumber: userMomoNumber,
                 matchId: match.id,
-                matchName: '${match.teamA} vs ${match.teamB}',
-                betTeam: team,
-                betTeamName: teamName,
-                amount: amount,
+                matchLabel: '${match.teamA} vs ${match.teamB}',
+                selection: team,
+                stakeAmount: amount.toDouble(),
               );
 
               if (mounted) {

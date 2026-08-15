@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:jc_sports_hub/utils/constants.dart';
@@ -51,12 +52,20 @@ class _OtpScreenState extends State<OtpScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_argumentsLoaded) {
-      // ModalRoute.of(context)!.settings.arguments gets data passed via Navigator
-      final args =
-          ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
-      _userId = args['userId'];
-      _email = args['email'];
-      _name = args['name'];
+      final route = ModalRoute.of(context);
+      final args = route?.settings.arguments;
+
+      if (args is Map<String, dynamic>) {
+        _userId = args['userId'] as String? ?? '';
+        _email = args['email'] as String? ?? '';
+        _name = args['name'] as String? ?? '';
+      } else {
+        final currentUser = FirebaseAuth.instance.currentUser;
+        _userId = currentUser?.uid ?? '';
+        _email = currentUser?.email ?? '';
+        _name = currentUser?.displayName ?? '';
+      }
+
       _argumentsLoaded = true;
     }
   }
