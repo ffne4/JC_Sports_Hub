@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../models/bet_model.dart';
 import '../../services/betting_service.dart';
@@ -11,9 +10,9 @@ class BetsScreen extends StatefulWidget {
   State<BetsScreen> createState() => _BetsScreenState();
 }
 
-class _BetsScreenState extends State<BetsScreen> with SingleTickerProviderStateMixin {
-  final BettingService _bettingService = BettingService();
-  final String? _userId = FirebaseAuth.instance.currentUser?.uid;
+class _BetsScreenState extends State<BetsScreen>
+    with SingleTickerProviderStateMixin {
+  final BetService _betService = BetService();
   late TabController _tabController;
 
   @override
@@ -62,11 +61,9 @@ class _BetsScreenState extends State<BetsScreen> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildBetList(String status) {
+  Widget _buildBetList(BetStatus status) {
     return StreamBuilder<List<BetModel>>(
-      stream: _userId != null
-          ? _bettingService.getMyBets(_userId!)
-          : const Stream.empty(),
+      stream: _betService.getUserBets(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
@@ -123,7 +120,9 @@ class _BetsScreenState extends State<BetsScreen> with SingleTickerProviderStateM
                           ? 'Winning bets will appear here after results are posted'
                           : 'Bets will appear here if the result goes against you',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: AppSizes.fontSmall),
+                  style: TextStyle(
+                      color: Colors.grey.shade400,
+                      fontSize: AppSizes.fontSmall),
                 ),
               ],
             ),
@@ -149,15 +148,33 @@ class _BetCard extends StatelessWidget {
   const _BetCard({required this.bet});
 
   Color _getStatusColor() {
-    if (bet.status == BetStatus.won) return Colors.green;
-    if (bet.status == BetStatus.lost) return Colors.red;
-    return Colors.orange; // pending
+    switch (bet.status) {
+      case BetStatus.won:
+        return Colors.green;
+      case BetStatus.lost:
+        return Colors.red;
+      case BetStatus.refunded:
+        return Colors.orange;
+      case BetStatus.cancelled:
+        return Colors.grey;
+      case BetStatus.pending:
+        return Colors.blue;
+    }
   }
 
   String _getStatusLabel() {
-    if (bet.status == BetStatus.won) return 'WON';
-    if (bet.status == BetStatus.lost) return 'LOST';
-    return 'PENDING';
+    switch (bet.status) {
+      case BetStatus.won:
+        return 'WON';
+      case BetStatus.lost:
+        return 'LOST';
+      case BetStatus.refunded:
+        return 'REFUNDED';
+      case BetStatus.cancelled:
+        return 'CANCELLED';
+      case BetStatus.pending:
+        return 'PENDING';
+    }
   }
 
   @override
@@ -177,7 +194,7 @@ class _BetCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    bet.matchLabel,
+                    bet.matchName,
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: AppSizes.fontSmall,
@@ -185,7 +202,8 @@ class _BetCard extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: statusColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
@@ -206,13 +224,14 @@ class _BetCard extends StatelessWidget {
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: AppColors.primary.withOpacity(0.08),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    'On Team ${bet.selection}',
+                    'On ${bet.betTeamName}',
                     style: const TextStyle(
                       color: AppColors.primary,
                       fontWeight: FontWeight.bold,
@@ -222,13 +241,14 @@ class _BetCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: Colors.orange.withOpacity(0.08),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    '${bet.odds.toStringAsFixed(2)}x',
+                    '${bet.oddsAtPlacement.toStringAsFixed(2)}x',
                     style: const TextStyle(
                       color: Colors.orange,
                       fontWeight: FontWeight.bold,
@@ -247,10 +267,11 @@ class _BetCard extends StatelessWidget {
                   children: [
                     Text(
                       'Stake',
-                      style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
+                      style:
+                          TextStyle(color: Colors.grey.shade500, fontSize: 11),
                     ),
                     Text(
-                      '${bet.stakeAmount.toInt()} UGX',
+                      '${bet.amount} UGX',
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ],
@@ -260,10 +281,11 @@ class _BetCard extends StatelessWidget {
                   children: [
                     Text(
                       'Potential Win',
-                      style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
+                      style:
+                          TextStyle(color: Colors.grey.shade500, fontSize: 11),
                     ),
                     Text(
-                      '${bet.potentialWinnings.toInt()} UGX',
+                      '${bet.potentialWinnings} UGX',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: bet.status == BetStatus.won
@@ -278,16 +300,24 @@ class _BetCard extends StatelessWidget {
                   children: [
                     Text(
                       'Date',
-                      style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
+                      style:
+                          TextStyle(color: Colors.grey.shade500, fontSize: 11),
                     ),
                     Text(
-                      '${bet.placedAt.day}/${bet.placedAt.month}/${bet.placedAt.year}',
+                      '${bet.createdAt.day}/${bet.createdAt.month}/${bet.createdAt.year}',
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
               ],
             ),
+            if (bet.reference != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Ref: ${bet.reference}',
+                style: TextStyle(color: Colors.grey.shade400, fontSize: 10),
+              ),
+            ],
           ],
         ),
       ),
