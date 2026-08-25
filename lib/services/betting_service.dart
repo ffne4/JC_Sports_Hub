@@ -1,6 +1,7 @@
 ﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/bet_model.dart';
 import '../models/match_betting_model.dart';
+import '../models/match_model.dart';
 
 // Handles placing bets and everything an admin needs to run betting on a
 // match: opening it with odds, ending it (stopping new bets, even if the
@@ -176,6 +177,17 @@ class BettingService {
         // All reads before any writes - required by Firestore transactions.
         final userSnap = await transaction.get(userRef);
         final bettingSnap = await transaction.get(bettingRef);
+
+        // Bets are only allowed on UPCOMING matches - never on live or
+        // already-completed ones.
+        final matchSnap = await transaction
+            .get(_firestore.collection('matches').doc(matchId));
+        if (matchSnap.exists) {
+          final matchData = matchSnap.data() as Map<String, dynamic>;
+          if (matchData['status'] != MatchStatus.upcoming) {
+            throw Exception('Bets are only allowed on upcoming matches');
+          }
+        }
 
         if (!bettingSnap.exists) {
           throw Exception('Betting is not open for this match');

@@ -1,0 +1,191 @@
+﻿60|          child: Column(
+61|            mainAxisSize: MainAxisSize.min,
+62|            children: [
+63|              const SizedBox(height: 4),
+64|              Wrap(
+65|                spacing: 12,
+66|                runSpacing: 12,
+67|                children: [
+68|                  for (final avatar in avatarOptions)
+69|                    GestureDetector(
+70|                      onTap: () async {
+71|                        Navigator.pop(dialogContext);
+72|                        await FirebaseFirestore.instance
+73|                            .collection('users')
+74|                            .doc(_currentUserId!)
+75|                            .update({'avatar': avatar.name});
+76|                        await _loadUserData();
+77|                        if (stateContext.mounted) {
+78|                          ScaffoldMessenger.of(stateContext).showSnackBar(
+79|                            const SnackBar(
+80|                              content: Text('Avatar updated!'),
+81|                              backgroundColor: Colors.green,
+82|                              behavior: SnackBarBehavior.floating,
+83|                            ),
+84|                          );
+85|                        }
+86|                      },
+87|                      child: Column(
+88|                        children: [
+89|                          ClipOval(
+90|                            child: Image.network(avatar.url,
+91|                                width: 84, height: 84, fit: BoxFit.cover),
+92|                          ),
+93|                          const SizedBox(height: 4),
+94|                          Text(avatar.name,
+95|                              style: const TextStyle(
+96|                                  fontSize: 10, fontWeight: FontWeight.bold)),
+97|                        ],
+98|                      ),
+99|                    ),
+100|                ],
+101|              ),
+102|            ],
+103|          ),
+104|        ),
+105|        actions: [
+106|          TextButton(
+107|            onPressed: () => Navigator.pop(dialogContext),
+108|            child: const Text('Cancel'),
+109|          ),
+110|        ],
+111|      ),
+112|    );
+113|  }
+114|
+115|  // Maps a saved avatar name back to its hosted image URL.
+116|  String _avatarUrl(String name) {
+117|    for (final avatar in avatarOptions) {
+118|      if (avatar.name == name) return avatar.url;
+119|    }
+120|    return 'https://api.dicebear.com/7.x/adventurer/svg?seed=JC&backgroundColor=1B5E20';
+121|  }
+122|
+123|  // Shows the "Change Password" dialog for the signed-in user.
+124|  void _showChangePasswordDialog() {
+125|    final stateContext = context;
+126|    final currentController = TextEditingController();
+127|    final newController = TextEditingController();
+128|    final confirmController = TextEditingController();
+129|    var isWorking = false;
+130|
+131|    showDialog(
+132|      context: context,
+133|      barrierDismissible: false,
+134|      builder: (dialogContext) => StatefulBuilder(
+135|        builder: (context, setDialogState) => AlertDialog(
+136|          title: const Text('Change Password',
+137|              style: TextStyle(fontWeight: FontWeight.bold)),
+138|          content: Column(
+139|            mainAxisSize: MainAxisSize.min,
+140|            crossAxisAlignment: CrossAxisAlignment.start,
+141|            children: [
+142|              Text(
+143|                'Enter your current password then your new password.',
+144|                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+145|              ),
+146|              const SizedBox(height: 14),
+147|              TextField(
+148|                controller: currentController,
+149|                obscureText: true,
+150|                decoration: InputDecoration(
+151|                  labelText: 'Current password',
+152|                  prefixIcon: const Icon(Icons.lock, size: 18),
+153|                  filled: true,
+154|                  fillColor: AppColors.background,
+155|                  border: OutlineInputBorder(
+156|                      borderRadius:
+157|                          BorderRadius.circular(AppSizes.radiusMedium)),
+158|                ),
+159|              ),
+160|              const SizedBox(height: 12),
+161|              TextField(
+162|                controller: newController,
+163|                obscureText: true,
+164|                decoration: InputDecoration(
+165|                  labelText: 'New password (min 6)',
+166|                  prefixIcon: const Icon(Icons.password, size: 18),
+167|                  filled: true,
+168|                  fillColor: AppColors.background,
+169|                  border: OutlineInputBorder(
+170|                      borderRadius:
+171|                          BorderRadius.circular(AppSizes.radiusMedium)),
+172|                ),
+173|              ),
+174|              const SizedBox(height: 12),
+175|              TextField(
+176|                controller: confirmController,
+177|                obscureText: true,
+178|                decoration: InputDecoration(
+179|                  labelText: 'Confirm new password',
+180|                  prefixIcon: const Icon(Icons.password, size: 18),
+181|                  filled: true,
+182|                  fillColor: AppColors.background,
+183|                  border: OutlineInputBorder(
+184|                      borderRadius:
+185|                          BorderRadius.circular(AppSizes.radiusMedium)),
+186|                ),
+187|              ),
+188|            ],
+189|          ),
+190|          actions: [
+191|            TextButton(
+192|              onPressed: () => Navigator.pop(dialogContext),
+193|              child: const Text('Cancel'),
+194|            ),
+195|            ElevatedButton(
+196|              onPressed: () async {
+197|                if (isWorking) return;
+198|                final current = currentController.text;
+199|                final next = newController.text;
+200|                final confirm = confirmController.text;
+201|                if (current.isEmpty || next.isEmpty || confirm.isEmpty) {
+202|                  ScaffoldMessenger.of(context).showSnackBar(
+203|                    const SnackBar(
+204|                      content: Text('Fill in all fields'),
+205|                      backgroundColor: AppColors.error,
+206|                    ),
+207|                  );
+208|                  return;
+209|                }
+210|                if (next != confirm) {
+211|                  ScaffoldMessenger.of(context).showSnackBar(
+212|                    const SnackBar(
+213|                      content: Text('New passwords do not match'),
+214|                      backgroundColor: AppColors.error,
+215|                    ),
+216|                  );
+217|                  return;
+218|                }
+219|                if (dialogContext.mounted)
+220|                  setDialogState(() => isWorking = true);
+221|                final result = await _authService.changePassword(
+222|                    currentPassword: current, newPassword: next);
+223|                if (!mounted) return;
+224|                ScaffoldMessenger.of(stateContext).showSnackBar(
+225|                  SnackBar(
+226|                    content: Text(result['message'] as String),
+227|                    backgroundColor: result['success'] == true
+228|                        ? Colors.green
+229|                        : AppColors.error,
+230|                    behavior: SnackBarBehavior.floating,
+231|                  ),
+232|                );
+233|                if (result['success'] == true) Navigator.pop(dialogContext);
+234|              },
+235|              style: ElevatedButton.styleFrom(
+236|                backgroundColor: AppColors.primary,
+237|                shape: RoundedRectangleBorder(
+238|                    borderRadius: BorderRadius.circular(AppSizes.radiusMedium)),
+239|              ),
+240|              child: Text(isWorking ? 'Please wait...' : 'Update Password'),
+241|            ),
+242|          ],
+243|        ),
+244|      ),
+245|    );
+246|  }
+247|
+248|  Future<void> _loadUserData() async {
+249|    if (_currentUserId == null) return;
+250|    final doc = await FirebaseFirestore.instance

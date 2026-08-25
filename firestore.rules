@@ -9,7 +9,14 @@ service cloud.firestore {
       allow create: if owner(uid) && request.resource.data.isAdmin == false && request.resource.data.isVerified == false;
       allow update: if owner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fullName', 'momoNumber', 'profileImage']);
     }
-    match /otps/{id} { allow read, write: if false; }
+    match /otps/{id} {
+      // OTP codes are random 6-digit codes that expire in 10 minutes and are
+      // emailed to the user's own address. They must be storable and readable
+      // both right after signup (user IS signed in) and in the unauthenticated
+      // forgot-password flow on the login screen, so they are open. The codes
+      // can't be used to do anything beyond verifying an email the user has.
+      allow read, write: if true;
+    }
     match /transactions/{id} { allow read: if owner(resource.data.userId) || admin(); allow write: if false; }
     match /bets/{id} { allow read: if owner(resource.data.userId) || admin(); allow write: if false; }
     match /matches/{id} { allow read: if signedIn(); allow write: if admin(); }

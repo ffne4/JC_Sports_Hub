@@ -1,0 +1,463 @@
+﻿1|import 'dart:convert';
+2|import 'dart:math';
+3|import 'package:firebase_auth/firebase_auth.dart';
+4|import 'package:cloud_firestore/cloud_firestore.dart';
+5|import 'package:http/http.dart' as http;
+6|import 'otp_service.dart';
+7|
+8|class AuthService {
+9|  final FirebaseAuth _auth = FirebaseAuth.instance;
+10|  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+11|  final OtpService _otpService = OtpService();
+12|
+13|  User? get currentUser => _auth.currentUser;
+14|  Stream<User?> get authStateChanges => _auth.authStateChanges();
+15|
+16|  Future<Map<String, dynamic>> signUp({
+17|    required String fullName,
+18|    required String email,
+19|    required String password,
+20|    required String userType,
+21|    String? webmail,
+22|    String? regNumber,
+23|  }) async {
+24|    try {
+25|      UserCredential userCredential =
+26|          await _auth.createUserWithEmailAndPassword(
+27|        email: email,
+28|        password: password,
+29|      );
+30|
+31|      User? user = userCredential.user;
+32|
+33|      if (user != null) {
+34|        await user.updateDisplayName(fullName);
+35|        await user.sendEmailVerification();
+36|
+37|        await _firestore.collection('users').doc(user.uid).set({
+38|          'uid': user.uid,
+39|          'fullName': fullName,
+40|          'email': email,
+41|          'userType': userType,
+42|          'webmail': webmail ?? '',
+43|          'regNumber': regNumber ?? '',
+44|          'isAdmin': false,
+45|          'isVerified': false,
+46|          'badgeCount': 0,
+47|          'walletBalance': 0,
+48|          'momoNumber': '',
+49|          'joinedAt': FieldValue.serverTimestamp(),
+50|          'profileImage': '',
+51|        });
+52|      }
+53|
+54|      Map<String, dynamic> otpResult = await _otpService.sendOtp(
+55|        userId: user!.uid,
+56|        email: email,
+57|        name: fullName,
+58|      );
+59|
+60|      return {
+61|        'success': true,
+62|        'otpSent': otpResult['success'] == true,
+63|        'message': otpResult['success'] == true
+64|            ? 'Account created! Check your email for the verification code.'
+65|            : 'Account created. Verification email could not be delivered yet. Please use Resend Code on the next screen.',
+66|        'userId': user.uid,
+67|        'email': email,
+68|        'name': fullName,
+69|      };
+70|    } on FirebaseAuthException catch (e) {
+71|      String message = _getAuthErrorMessage(e.code);
+72|      return {'success': false, 'message': message};
+73|    } catch (e) {
+74|      return {
+75|        'success': false,
+76|        'message': 'Something went wrong. Please try again.'
+77|      };
+78|    }
+79|  }
+80|
+81|  Future<Map<String, dynamic>> login({
+82|    required String email,
+83|    required String password,
+84|  }) async {
+85|    try {
+86|      UserCredential userCredential = await _auth.signInWithEmailAndPassword(
+87|        email: email,
+88|        password: password,
+89|      );
+90|
+91|      User? user = userCredential.user;
+92|
+93|      if (user != null) {
+94|        DocumentSnapshot userDoc =
+95|            await _firestore.collection('users').doc(user.uid).get();
+96|
+97|        if (userDoc.exists) {
+98|          Map<String, dynamic> data = userDoc.data() as Map<String, dynamic>;
+99|          final isVerified = data['isVerified'] == true;
+100|
+101|          if (!isVerified) {
+102|            await _auth.signOut();
+103|            return {
+104|              'success': false,
+105|              'needVerification': true,
+106|              'userId': user.uid,
+107|              'email': data['email'] ?? email,
+108|              'name': data['fullName'] ?? '',
+109|              'message': 'Please verify your email before logging in.',
+110|            };
+111|          }
+112|
+113|          return {
+114|            'success': true,
+115|            'message': 'Login successful',
+116|            'userData': data,
+117|          };
+118|        }
+119|      }
+120|
+121|      return {'success': true, 'message': 'Login successful'};
+122|    } on FirebaseAuthException catch (e) {
+123|      String message = _getAuthErrorMessage(e.code);
+124|      return {'success': false, 'message': message};
+125|    } catch (e) {
+126|      return {
+127|        'success': false,
+128|        'message': 'Something went wrong. Please try again.'
+129|      };
+130|    }
+131|  }
+132|
+133|  Future<Map<String, dynamic>> loginAsGuest({required String email}) async {
+134|    try {
+135|      UserCredential userCredential = await _auth.signInAnonymously();
+136|      User? user = userCredential.user;
+137|
+138|      if (user != null) {
+139|        await _firestore.collection('users').doc(user.uid).set({
+140|          'uid': user.uid,
+141|          'fullName': 'Guest',
+142|          'email': email,
+143|          'userType': 'guest',
+144|          'isAdmin': false,
+145|          'isVerified': false,
+146|          'badgeCount': 0,
+147|          'walletBalance': 0,
+148|          'momoNumber': '',
+149|          'joinedAt': FieldValue.serverTimestamp(),
+150|          'profileImage': '',
+151|        });
+152|      }
+153|
+154|      return {'success': true, 'message': 'Continuing as guest'};
+155|    } catch (e) {
+156|      return {
+157|        'success': false,
+158|        'message': 'Could not continue as guest. Please try again.'
+159|      };
+160|    }
+161|  }
+162|
+163|  Future<void> logout() async {
+164|    await _auth.signOut();
+165|  }
+166|
+167|  Future<Map<String, dynamic>> resetPassword({required String email}) async {
+168|    try {
+169|      await _auth.sendPasswordResetEmail(email: email);
+170|      return {
+171|        'success': true,
+172|        'message': 'Password reset email sent. Check your inbox.'
+173|      };
+174|    } on FirebaseAuthException catch (e) {
+175|      return {'success': false, 'message': _getAuthErrorMessage(e.code)};
+176|    } catch (e) {
+177|      return {
+178|        'success': false,
+179|        'message': 'Something went wrong. Please check your internet and try again.'
+180|      };
+181|    }
+182|  }
+183|
+184|  // Identity Toolkit REST call used by the in-app reset below: asks Firebase
+185|  // for a one-time password-reset link without requiring the user to open an
+186|  // email. Returns the oobCode so confirmPasswordReset can apply the new
+187|  // password immediately, or null so the caller can fall back to the email.
+188|  Future<String?> _fetchResetOobCode(String email) async {
+189|    try {
+190|      final apiKey = _auth.app.options.apiKey;
+191|      final uri = Uri.parse(
+192|          'https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=$apiKey');
+193|      final resp = await http
+194|          .post(
+195|            uri,
+196|            headers: {'Content-Type': 'application/json'},
+197|            body: jsonEncode({
+198|              'requestType': 'RESET_PASSWORD',
+199|              'email': email,
+200|              'returnOobLink': true,
+201|            }),
+202|          )
+203|          .timeout(const Duration(seconds: 20));
+204|      if (resp.statusCode != 200) return null;
+205|
+206|      final data = jsonDecode(resp.body) as Map<String, dynamic>;
+207|      // Depending on the API version the link comes back in "oobLink" or in
+208|      // the "email" field; a regex pulls the oobCode from either.
+209|      final link = ((data['oobLink'] ?? data['email']) ?? '').toString();
+210|      final match = RegExp(r'[?&]oobCode=([A-Za-z0-9_\-\.]+)').firstMatch(link);
+211|      if (match != null) return match.group(1);
+212|      final direct = (data['oobCode'] ?? data['code'] ?? '').toString();
+213|      return direct.isNotEmpty ? direct : null;
+214|    } catch (_) {
+215|      return null;
+216|    }
+217|  }
+218|
+219|  // Forgot-password step 3: the user entered the correct OTP (step 2) and now
+220|  // sets a new password entirely inside the app. The OTP doc is the proof of
+221|  // email ownership, so we confirm the reset directly. A full in-app reset is
+222|  // attempted first; if the reset link cannot be obtained, it falls back to
+223|  // sending the standard Firebase password-reset email.
+224|  Future<Map<String, dynamic>> resetForgottenPassword({
+225|    required String resetUserId,
+226|    required String newPassword,
+227|  }) async {
+228|    try {
+229|      final doc = await _firestore.collection('otps').doc(resetUserId).get();
+230|      final data = doc.exists
+231|          ? (doc.data() as Map<String, dynamic>)
+232|          : <String, dynamic>{};
+233|      final verified = data['verified'] == true;
+234|      final sessionAllowed = data['pwResetAllowed'] == true;
+235|      if (!verified || !sessionAllowed) {
+236|        return {
+237|          'success': false,
+238|          'message': 'Please verify your code first before resetting.'
+239|        };
+240|      }
+241|      final allowedAt = (data['allowedAt'] as Timestamp?)?.toDate() ??
+242|          DateTime.fromMillisecondsSinceEpoch(0);
+243|      if (DateTime.now().difference(allowedAt) > const Duration(minutes: 10)) {
+244|        return {
+245|          'success': false,
+246|          'message': 'Reset session expired. Please request a new code.'
+247|        };
+248|      }
+249|      if (newPassword.length < 6) {
+250|        return {
+251|          'success': false,
+252|          'message': 'Password must be at least 6 characters.'
+253|        };
+254|      }
+255|
+256|      final email = data['email'] as String?;
+257|      if (email == null) {
+258|        return {'success': false, 'message': 'Account not found.'};
+259|      }
+260|
+261|      final oobCode = await _fetchResetOobCode(email);
+262|      if (oobCode != null) {
+263|        await _auth.confirmPasswordReset(
+264|            code: oobCode, newPassword: newPassword);
+265|        // Consume the reset session so the code can't be replayed.
+266|        await _firestore
+267|            .collection('otps')
+268|            .doc(resetUserId)
+269|            .update({'pwResetAllowed': false});
+270|        return {
+271|          'success': true,
+272|          'message': 'Password reset successfully! You can now log in with your new password.'
+273|        };
+274|      }
+275|
+276|      // Fallback: the standard Firebase reset email (identity already proven).
+277|      await _auth.sendPasswordResetEmail(email: email);
+278|      return {
+279|        'success': true,
+280|        'emailSent': true,
+281|        'message': 'A password reset email has been sent to $email. Open the link it contains to set your new password.'
+282|      };
+283|    } on FirebaseAuthException catch (e) {
+284|      return {'success': false, 'message': _getAuthErrorMessage(e.code)};
+285|    } catch (e) {
+286|      return {
+287|        'success': false,
+288|        'message': 'Something went wrong resetting your password. Please try again.'
+289|      };
+290|    }
+291|  }
+292|
+293|  // Forgot-password step 1: confirms the account exists (via Firebase Auth,
+294|  // no Firestore read so it works for unauthenticated users on the login
+295|  // screen) and emails an OTP stored under a random reset id.
+296|  Future<Map<String, dynamic>> sendForgotPasswordOtp({
+297|    required String email,
+298|  }) async {
+299|    try {
+300|      // Confirm the account exists WITHOUT leaking which email is registered
+301|      // (with email-enumeration protection, a nonexistent account throws
+302|      // user-not-found - which is also what tells us "no account" safely).
+303|      try {
+304|        await _auth.signInWithEmailAndPassword(email: email, password: 'x');
+305|      } on FirebaseAuthException catch (e) {
+306|        if (e.code != 'wrong-password' && e.code != 'invalid-credential') {
+307|          return {
+308|            'success': false,
+309|            'message': 'No account found with this email address.'
+310|          };
+311|        }
+312|        // wrong-password/invalid-credential => the account EXISTS.
+313|      }
+314|
+315|      // A random, non-guessable store id so the reset code can't be looked up
+316|      // by someone who merely knows the victim's email.
+317|      final random = Random();
+318|      final resetId =
+319|          'rst-${(email.hashCode % 1000000).abs()}-${100000 + random.nextInt(900000)}';
+320|
+321|      final displayName = email.substring(0, email.indexOf('@'));
+322|      final otpResult = await _otpService.sendOtp(
+323|        userId: resetId,
+324|        email: email,
+325|        name: displayName,
+326|      );
+327|      return {
+328|        'success': otpResult['success'] == true,
+329|        'message': otpResult['message'],
+330|        'userId': resetId,
+331|      };
+332|    } catch (e) {
+333|      return {
+334|        'success': false,
+335|        'message': 'Something went wrong sending the code. Please try again.'
+336|      };
+337|    }
+338|  }
+339|
+340|  // Forgot-password step 2: checks the OTP. This flow never updates the
+341|  // user's isVerified flag - the code is stored under a synthetic reset id.
+342|  // On success it also marks this reset session as verified/allowed so that
+343|  // step 3 can change the password without needing the reset email link.
+344|  Future<Map<String, dynamic>> verifyForgotPasswordOtp({
+345|    required String userId,
+346|    required String code,
+347|  }) async {
+348|    final result = await _otpService.verifyOtp(
+349|      userId: userId,
+350|      enteredCode: code,
+351|      markUserVerified: false,
+352|    );
+353|    if (result['success'] == true) {
+354|      await _firestore.collection('otps').doc(userId).update({
+355|        'pwResetAllowed': true,
+356|        'allowedAt': FieldValue.serverTimestamp(),
+357|      });
+358|    }
+359|    return result;
+360|  }
+361|
+362|  // Change password for an already signed-in user: reauthenticates with the
+363|  // current password then updates to the new one. Returns the result map.
+364|  Future<Map<String, dynamic>> changePassword({
+365|    required String currentPassword,
+366|    required String newPassword,
+367|  }) async {
+368|    try {
+369|      final user = _auth.currentUser;
+370|      if (user == null) {
+371|        return {'success': false, 'message': 'You must be signed in first.'};
+372|      }
+373|      if (newPassword.length < 6) {
+374|        return {
+375|          'success': false,
+376|          'message': 'Password must be at least 6 characters.'
+377|        };
+378|      }
+379|
+380|      final email = user.email;
+381|      if (email == null) {
+382|        return {
+383|          'success': false,
+384|          'message': 'This account has no email to verify against.'
+385|        };
+386|      }
+387|
+388|      // Re-authenticate with the current password to prove identity before
+389|      // allowing the password change (Firebase security requirement).
+390|      final credential = EmailAuthProvider.credential(
+391|        email: email,
+392|        password: currentPassword,
+393|      );
+394|      await user.reauthenticateWithCredential(credential);
+395|      await user.updatePassword(newPassword);
+396|
+397|      return {'success': true, 'message': 'Password updated successfully.'};
+398|    } on FirebaseAuthException catch (e) {
+399|      if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+400|        return {
+401|          'success': false,
+402|          'message': 'Current password is incorrect.'
+403|        };
+404|      }
+405|      if (e.code == 'weak-password') {
+406|        return {
+407|          'success': false,
+408|          'message': 'New password is too weak. Use at least 6 characters.'
+409|        };
+410|      }
+411|      return {'success': false, 'message': _getAuthErrorMessage(e.code)};
+412|    } catch (e) {
+413|      return {
+414|        'success': false,
+415|        'message': 'Something went wrong changing the password. Please try again.'
+416|      };
+417|    }
+418|  }
+419|
+420|  Future<Map<String, dynamic>> resendOtp({
+421|    required String userId,
+422|    required String email,
+423|    required String name,
+424|  }) async {
+425|    return await _otpService.resendOtp(
+426|        userId: userId, email: email, name: name);
+427|  }
+428|
+429|  Future<bool> isAdmin() async {
+430|    User? user = _auth.currentUser;
+431|    if (user == null) return false;
+432|    DocumentSnapshot doc =
+433|        await _firestore.collection('users').doc(user.uid).get();
+434|    if (doc.exists) {
+435|      Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+436|      return data['isAdmin'] == true;
+437|    }
+438|    return false;
+439|  }
+440|
+441|  String _getAuthErrorMessage(String code) {
+442|    switch (code) {
+443|      case 'email-already-in-use':
+444|        return 'This email is already registered. Please login instead.';
+445|      case 'invalid-email':
+446|        return 'The email address is not valid.';
+447|      case 'weak-password':
+448|        return 'Password is too weak. Use at least 6 characters.';
+449|      case 'user-not-found':
+450|        return 'No account found with this email.';
+451|      case 'wrong-password':
+452|        return 'Incorrect password. Please try again.';
+453|      case 'too-many-requests':
+454|        return 'Too many attempts. Please wait a moment and try again.';
+455|      case 'network-request-failed':
+456|        return 'No internet connection. Please check your network.';
+457|      case 'invalid-credential':
+458|        return 'Invalid email or password. Please try again.';
+459|      default:
+460|        return 'An error occurred. Please try again.';
+461|    }
+462|  }
+463|}

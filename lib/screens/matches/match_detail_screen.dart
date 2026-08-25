@@ -371,6 +371,12 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
       builder: (context, snapshot) {
         final betting = snapshot.data;
 
+        // Betting is only available on UPCOMING matches - never on live or
+        // completed ones.
+        if (match.status != MatchStatus.upcoming) {
+          return const SizedBox.shrink();
+        }
+
         if (betting == null) {
           // Betting hasn't been opened by an admin for this match yet -
           // show nothing rather than an empty/confusing card.

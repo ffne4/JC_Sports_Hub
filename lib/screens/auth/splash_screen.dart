@@ -70,12 +70,12 @@ class _SplashScreenState extends State<SplashScreen>
 
     if (!mounted) return;
 
-    print('STEP 1: Checking current user');
+    debugPrint('STEP 1: Checking current user');
     User? currentUser = FirebaseAuth.instance.currentUser;
-    print('STEP 2: currentUser = ${currentUser?.uid}');
+    debugPrint('STEP 2: currentUser = ${currentUser?.uid}');
 
     if (currentUser != null) {
-      print('STEP 3: Fetching Firestore doc for ${currentUser.uid}');
+      debugPrint('STEP 3: Fetching Firestore doc for ${currentUser.uid}');
       try {
         DocumentSnapshot userDoc = await FirebaseFirestore.instance
             .collection('users')
@@ -88,6 +88,8 @@ class _SplashScreenState extends State<SplashScreen>
           final firebaseVerified = currentUser.emailVerified == true;
           final firestoreVerified = data['isVerified'] == true;
           final isVerified = firebaseVerified || firestoreVerified;
+
+          if (!mounted) return;
 
           if (isVerified) {
             Navigator.pushReplacementNamed(context, '/home');
@@ -106,11 +108,13 @@ class _SplashScreenState extends State<SplashScreen>
           Navigator.pushReplacementNamed(context, '/onboarding');
         }
       } catch (e) {
-        print('STEP ERROR: Firestore fetch failed: $e');
+        debugPrint('STEP ERROR: Firestore fetch failed: $e');
+        if (!mounted) return;
         Navigator.pushReplacementNamed(context, '/onboarding');
       }
     } else {
-      print('STEP 3-ALT: No user logged in, going to onboarding');
+      debugPrint('STEP 3-ALT: No user logged in, going to onboarding');
+      if (!mounted) return;
       Navigator.pushReplacementNamed(context, '/onboarding');
     }
   }

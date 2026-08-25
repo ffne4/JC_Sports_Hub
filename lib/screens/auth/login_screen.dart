@@ -94,16 +94,18 @@ class _LoginScreenState extends State<LoginScreen> {
                 onPressed: isSending
                     ? null
                     : () async {
-                        setState(() => isSending = true);
+                        if (dialogContext.mounted)
+                          setState(() => isSending = true);
                         Map<String, dynamic> resendResult =
                             await _authService.resendOtp(
                           userId: userId,
                           email: email,
                           name: name,
                         );
-                        setState(() => isSending = false);
+                        if (dialogContext.mounted)
+                          setState(() => isSending = false);
                         if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          ScaffoldMessenger.of(stateContext).showSnackBar(
                             SnackBar(
                               content: Text(resendResult['message']),
                               backgroundColor: resendResult['success']
@@ -143,6 +145,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _showGuestEmailDialog() {
     final guestEmailController = TextEditingController();
+    final outerContext = context;
 
     showDialog(
       context: context,
@@ -203,8 +206,7 @@ class _LoginScreenState extends State<LoginScreen> {
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.pop(context);
-              guestEmailController.dispose();
+              Navigator.pop(dialogContext);
             },
             child: Text(
               'Cancel',
@@ -216,7 +218,7 @@ class _LoginScreenState extends State<LoginScreen> {
               final email = guestEmailController.text.trim();
 
               if (!email.contains('@') || !email.contains('.')) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                ScaffoldMessenger.of(outerContext).showSnackBar(
                   const SnackBar(
                     content: Text('Please enter a valid email'),
                     backgroundColor: AppColors.error,
@@ -225,8 +227,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 return;
               }
 
-              Navigator.pop(context);
-              guestEmailController.dispose();
+              Navigator.pop(dialogContext);
 
               setState(() => _isLoading = true);
 
@@ -241,7 +242,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   // Navigate to home screen directly
                   Navigator.pushReplacementNamed(context, '/home');
                 } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  ScaffoldMessenger.of(outerContext).showSnackBar(
                     SnackBar(
                       content: Text(result['message']),
                       backgroundColor: AppColors.error,
@@ -268,13 +269,22 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _showForgotPasswordDialog() {
+    final outerContext = context;
     showDialog(
       context: context,
       builder: (dialogContext) {
-        final resetEmailController = TextEditingController();
+        final emailController = TextEditingController();
+        final otpController = TextEditingController();
+        final newPasswordController = TextEditingController();
+        final confirmPasswordController = TextEditingController();
+        var showNewPassword = false;
+        var step = 1; // 1 = enter email, 2 = enter OTP code, 3 = new password
+        var isWorking = false;
+        String? resetUserId;
+        var resetEmail = '';
 
         return StatefulBuilder(
-          builder: (context, setState) => AlertDialog(
+          builder: (context, setDialogState) => AlertDialog(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
             ),
@@ -282,45 +292,121 @@ class _LoginScreenState extends State<LoginScreen> {
               'Reset Password',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Enter your email and we will send you a reset link:',
-                  style: TextStyle(
-                    color: Colors.grey.shade600,
-                    fontSize: AppSizes.fontSmall,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: resetEmailController,
-                  keyboardType: TextInputType.emailAddress,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    hintText: 'your@email.com',
-                    prefixIcon: const Icon(Icons.email, color: AppColors.primary),
-                    filled: true,
-                    fillColor: AppColors.background,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
-                      borderSide: const BorderSide(
-                        color: AppColors.primary,
-                        width: 2,
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (step == 1) ...[
+                    Text(
+                      'Enter your email and we will send you a 6-digit verification code:',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: AppSizes.fontSmall,
                       ),
                     ),
-                  ),
-                ),
-              ],
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: 'your@email.com',
+                        prefixIcon:
+                            const Icon(Icons.email, color: AppColors.primary),
+                        filled: true,
+                        fillColor: AppColors.background,
+                        border: OutlineInputBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppSizes.radiusMedium),
+                        ),
+                      ),
+                    ),
+                  ] else if (step == 2) ...[
+                    Text(
+                      'We sent a code to $resetEmail. Enter it below:',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: AppSizes.fontSmall,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: otpController,
+                      keyboardType: TextInputType.number,
+                      maxLength: 6,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: '6-digit code',
+                        counterText: '',
+                        prefixIcon:
+                            const Icon(Icons.pin, color: AppColors.primary),
+                        filled: true,
+                        fillColor: AppColors.background,
+                        border: OutlineInputBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppSizes.radiusMedium),
+                        ),
+                      ),
+                    ),
+                  ] else ...[
+                    Text(
+                      'Verified! Enter your new password:',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: AppSizes.fontSmall,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: newPasswordController,
+                      obscureText: !showNewPassword,
+                      decoration: InputDecoration(
+                        labelText: 'New password (min 6)',
+                        prefixIcon: const Icon(Icons.password,
+                            color: AppColors.primary),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            showNewPassword
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                            size: 18,
+                          ),
+                          onPressed: () => setDialogState(
+                              () => showNewPassword = !showNewPassword),
+                        ),
+                        filled: true,
+                        fillColor: AppColors.background,
+                        border: OutlineInputBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppSizes.radiusMedium),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: confirmPasswordController,
+                      obscureText: !showNewPassword,
+                      decoration: InputDecoration(
+                        labelText: 'Confirm new password',
+                        prefixIcon: const Icon(Icons.password,
+                            color: AppColors.primary),
+                        filled: true,
+                        fillColor: AppColors.background,
+                        border: OutlineInputBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppSizes.radiusMedium),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
             actions: [
               TextButton(
                 onPressed: () {
                   Navigator.pop(dialogContext);
-                  resetEmailController.dispose();
                 },
                 child: Text(
                   'Cancel',
@@ -328,40 +414,178 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               ElevatedButton(
-                onPressed: () async {
-                  final email = resetEmailController.text.trim();
-                  if (!email.contains('@')) return;
-
-                  Navigator.pop(dialogContext);
-                  resetEmailController.dispose();
-
-                  if (!mounted) return;
-                  final messenger = ScaffoldMessenger.of(context);
-
-                  Map<String, dynamic> result = await _authService.resetPassword(
-                    email: email,
-                  );
-
-                  if (mounted) {
-                    messenger.showSnackBar(
-                      SnackBar(
-                        content: Text(result['message']),
-                        backgroundColor:
-                            result['success'] ? AppColors.accent : AppColors.error,
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  }
-                },
+                onPressed: isWorking
+                    ? null
+                    : () async {
+                        if (step == 1) {
+                          final email = emailController.text.trim();
+                          if (!email.contains('@') || !email.contains('.')) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Please enter a valid email'),
+                                backgroundColor: AppColors.error,
+                              ),
+                            );
+                            return;
+                          }
+                          if (dialogContext.mounted)
+                            setDialogState(() => isWorking = true);
+                          final result = await _authService
+                              .sendForgotPasswordOtp(email: email);
+                          if (dialogContext.mounted)
+                            setDialogState(() => isWorking = false);
+                          if (!mounted) return;
+                          if (result['success'] == true) {
+                            resetUserId = result['userId'] as String?;
+                            resetEmail = email;
+                            if (dialogContext.mounted)
+                              setDialogState(() => step = 2);
+                            ScaffoldMessenger.of(outerContext).showSnackBar(
+                              SnackBar(
+                                content: Text(result['message']),
+                                backgroundColor: AppColors.accent,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(outerContext).showSnackBar(
+                              SnackBar(
+                                content: Text(result['message']),
+                                backgroundColor: AppColors.error,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        } else if (step == 2) {
+                          final code = otpController.text.trim();
+                          if (code.length != 6 || resetUserId == null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Enter the 6-digit code'),
+                                backgroundColor: AppColors.error,
+                              ),
+                            );
+                            return;
+                          }
+                          if (dialogContext.mounted)
+                            setDialogState(() => isWorking = true);
+                          final verify =
+                              await _authService.verifyForgotPasswordOtp(
+                            userId: resetUserId!,
+                            code: code,
+                          );
+                          if (dialogContext.mounted)
+                            setDialogState(() => isWorking = false);
+                          if (!mounted) return;
+                          if (verify['success'] == true) {
+                            // Identity proven - go straight to setting the new
+                            // password in-app instead of emailing a link.
+                            if (dialogContext.mounted) {
+                              setDialogState(() {
+                                resetUserId = resetUserId;
+                                step = 3;
+                              });
+                            }
+                            ScaffoldMessenger.of(outerContext).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                    'Code verified! Now set your new password.'),
+                                backgroundColor: AppColors.accent,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(outerContext).showSnackBar(
+                              SnackBar(
+                                content: Text(verify['message']),
+                                backgroundColor: AppColors.error,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        } else {
+                          // STEP 3 - the OTP was verified above; set the new
+                          // password directly so the user can log in again.
+                          final newPass = newPasswordController.text;
+                          final confirm = confirmPasswordController.text;
+                          if (newPass.trim().isEmpty || confirm.trim().isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                    'Enter and confirm your new password'),
+                                backgroundColor: AppColors.error,
+                              ),
+                            );
+                            return;
+                          }
+                          if (newPass.length < 6) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                    'Password must be at least 6 characters'),
+                                backgroundColor: AppColors.error,
+                              ),
+                            );
+                            return;
+                          }
+                          if (newPass != confirm) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Passwords do not match'),
+                                backgroundColor: AppColors.error,
+                              ),
+                            );
+                            return;
+                          }
+                          if (resetUserId == null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                    'Reset session expired. Please restart.'),
+                                backgroundColor: AppColors.error,
+                              ),
+                            );
+                            return;
+                          }
+                          if (dialogContext.mounted) {
+                            setDialogState(() => isWorking = true);
+                          }
+                          final reset = await _authService
+                              .resetForgottenPassword(
+                            resetUserId: resetUserId!,
+                            newPassword: newPass,
+                          );
+                          if (dialogContext.mounted) {
+                            setDialogState(() => isWorking = false);
+                          }
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(outerContext).showSnackBar(
+                            SnackBar(
+                              content: Text(reset['message']),
+                              backgroundColor: reset['success'] == true
+                                  ? Colors.green
+                                  : AppColors.error,
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                          if (reset['success'] == true) {
+                            Navigator.pop(dialogContext);
+                          }
+                        }
+                      },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
                   ),
                 ),
-                child: const Text(
-                  'Send Reset Link',
-                  style: TextStyle(color: Colors.white),
+                child: Text(
+                  isWorking
+                      ? 'Please wait...'
+                      : (step == 1
+                          ? 'Send Code'
+                          : (step == 2 ? 'Verify Code' : 'Set New Password')),
+                  style: const TextStyle(color: Colors.white),
                 ),
               ),
             ],

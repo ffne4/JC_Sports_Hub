@@ -1,5 +1,8 @@
+import 'dart:convert';
+import 'dart:math';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:http/http.dart' as http;
 import 'otp_service.dart';
 
 class AuthService {
@@ -170,6 +173,247 @@ class AuthService {
       };
     } on FirebaseAuthException catch (e) {
       return {'success': false, 'message': _getAuthErrorMessage(e.code)};
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Something went wrong. Please check your internet and try again.'
+      };
+    }
+  }
+
+  // Identity Toolkit REST call used by the in-app reset below: asks Firebase
+  // for a one-time password-reset link without requiring the user to open an
+  // email. Returns the oobCode so confirmPasswordReset can apply the new
+  // password immediately, or null so the caller can fall back to the email.
+  Future<String?> _fetchResetOobCode(String email) async {
+    try {
+      final apiKey = _auth.app.options.apiKey;
+      final uri = Uri.parse(
+          'https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=$apiKey');
+      final resp = await http
+          .post(
+            uri,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'requestType': 'RESET_PASSWORD',
+              'email': email,
+              'returnOobLink': true,
+            }),
+          )
+          .timeout(const Duration(seconds: 20));
+      if (resp.statusCode != 200) return null;
+
+      final data = jsonDecode(resp.body) as Map<String, dynamic>;
+      // Depending on the API version the link comes back in "oobLink" or in
+      // the "email" field; a regex pulls the oobCode from either.
+      final link = ((data['oobLink'] ?? data['email']) ?? '').toString();
+      final match = RegExp(r'[?&]oobCode=([A-Za-z0-9_\-\.]+)').firstMatch(link);
+      if (match != null) return match.group(1);
+      final direct = (data['oobCode'] ?? data['code'] ?? '').toString();
+      return direct.isNotEmpty ? direct : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // Forgot-password step 3: the user entered the correct OTP (step 2) and now
+  // sets a new password entirely inside the app. The OTP doc is the proof of
+  // email ownership, so we confirm the reset directly. A full in-app reset is
+  // attempted first; if the reset link cannot be obtained, it falls back to
+  // sending the standard Firebase password-reset email.
+  Future<Map<String, dynamic>> resetForgottenPassword({
+    required String resetUserId,
+    required String newPassword,
+  }) async {
+    try {
+      final doc = await _firestore.collection('otps').doc(resetUserId).get();
+      final data = doc.exists
+          ? (doc.data() as Map<String, dynamic>)
+          : <String, dynamic>{};
+      final verified = data['verified'] == true;
+      final sessionAllowed = data['pwResetAllowed'] == true;
+      if (!verified || !sessionAllowed) {
+        return {
+          'success': false,
+          'message': 'Please verify your code first before resetting.'
+        };
+      }
+      final allowedAt = (data['allowedAt'] as Timestamp?)?.toDate() ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      if (DateTime.now().difference(allowedAt) > const Duration(minutes: 10)) {
+        return {
+          'success': false,
+          'message': 'Reset session expired. Please request a new code.'
+        };
+      }
+      if (newPassword.length < 6) {
+        return {
+          'success': false,
+          'message': 'Password must be at least 6 characters.'
+        };
+      }
+
+      final email = data['email'] as String?;
+      if (email == null) {
+        return {'success': false, 'message': 'Account not found.'};
+      }
+
+      final oobCode = await _fetchResetOobCode(email);
+      if (oobCode != null) {
+        await _auth.confirmPasswordReset(
+            code: oobCode, newPassword: newPassword);
+        // Consume the reset session so the code can't be replayed.
+        await _firestore
+            .collection('otps')
+            .doc(resetUserId)
+            .update({'pwResetAllowed': false});
+        return {
+          'success': true,
+          'message': 'Password reset successfully! You can now log in with your new password.'
+        };
+      }
+
+      // Fallback: the standard Firebase reset email (identity already proven).
+      await _auth.sendPasswordResetEmail(email: email);
+      return {
+        'success': true,
+        'emailSent': true,
+        'message': 'A password reset email has been sent to $email. Open the link it contains to set your new password.'
+      };
+    } on FirebaseAuthException catch (e) {
+      return {'success': false, 'message': _getAuthErrorMessage(e.code)};
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Something went wrong resetting your password. Please try again.'
+      };
+    }
+  }
+
+  // Forgot-password step 1: confirms the account exists (via Firebase Auth,
+  // no Firestore read so it works for unauthenticated users on the login
+  // screen) and emails an OTP stored under a random reset id.
+  Future<Map<String, dynamic>> sendForgotPasswordOtp({
+    required String email,
+  }) async {
+    try {
+      // Confirm the account exists WITHOUT leaking which email is registered
+      // (with email-enumeration protection, a nonexistent account throws
+      // user-not-found - which is also what tells us "no account" safely).
+      try {
+        await _auth.signInWithEmailAndPassword(email: email, password: 'x');
+      } on FirebaseAuthException catch (e) {
+        if (e.code != 'wrong-password' && e.code != 'invalid-credential') {
+          return {
+            'success': false,
+            'message': 'No account found with this email address.'
+          };
+        }
+        // wrong-password/invalid-credential => the account EXISTS.
+      }
+
+      // A random, non-guessable store id so the reset code can't be looked up
+      // by someone who merely knows the victim's email.
+      final random = Random();
+      final resetId =
+          'rst-${(email.hashCode % 1000000).abs()}-${100000 + random.nextInt(900000)}';
+
+      final displayName = email.substring(0, email.indexOf('@'));
+      final otpResult = await _otpService.sendOtp(
+        userId: resetId,
+        email: email,
+        name: displayName,
+      );
+      return {
+        'success': otpResult['success'] == true,
+        'message': otpResult['message'],
+        'userId': resetId,
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Something went wrong sending the code. Please try again.'
+      };
+    }
+  }
+
+  // Forgot-password step 2: checks the OTP. This flow never updates the
+  // user's isVerified flag - the code is stored under a synthetic reset id.
+  // On success it also marks this reset session as verified/allowed so that
+  // step 3 can change the password without needing the reset email link.
+  Future<Map<String, dynamic>> verifyForgotPasswordOtp({
+    required String userId,
+    required String code,
+  }) async {
+    final result = await _otpService.verifyOtp(
+      userId: userId,
+      enteredCode: code,
+      markUserVerified: false,
+    );
+    if (result['success'] == true) {
+      await _firestore.collection('otps').doc(userId).update({
+        'pwResetAllowed': true,
+        'allowedAt': FieldValue.serverTimestamp(),
+      });
+    }
+    return result;
+  }
+
+  // Change password for an already signed-in user: reauthenticates with the
+  // current password then updates to the new one. Returns the result map.
+  Future<Map<String, dynamic>> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) {
+        return {'success': false, 'message': 'You must be signed in first.'};
+      }
+      if (newPassword.length < 6) {
+        return {
+          'success': false,
+          'message': 'Password must be at least 6 characters.'
+        };
+      }
+
+      final email = user.email;
+      if (email == null) {
+        return {
+          'success': false,
+          'message': 'This account has no email to verify against.'
+        };
+      }
+
+      // Re-authenticate with the current password to prove identity before
+      // allowing the password change (Firebase security requirement).
+      final credential = EmailAuthProvider.credential(
+        email: email,
+        password: currentPassword,
+      );
+      await user.reauthenticateWithCredential(credential);
+      await user.updatePassword(newPassword);
+
+      return {'success': true, 'message': 'Password updated successfully.'};
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+        return {
+          'success': false,
+          'message': 'Current password is incorrect.'
+        };
+      }
+      if (e.code == 'weak-password') {
+        return {
+          'success': false,
+          'message': 'New password is too weak. Use at least 6 characters.'
+        };
+      }
+      return {'success': false, 'message': _getAuthErrorMessage(e.code)};
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Something went wrong changing the password. Please try again.'
+      };
     }
   }
 

@@ -1,0 +1,396 @@
+﻿505|        ),
+506|      ]),
+507|    );
+508|  }
+509|}
+510|
+511|class _MatchesTabWidget extends StatefulWidget {
+512|  final String adminId;
+513|  const _MatchesTabWidget({required this.adminId});
+514|  @override
+515|  State<_MatchesTabWidget> createState() => _MatchesTabWidgetState();
+516|}
+517|
+518|class _MatchesTabWidgetState extends State<_MatchesTabWidget> {
+519|  final MatchService _matchService = MatchService();
+520|  // Cached once so builds don't re-create (and re-subscribe to) the
+521|  // Firestore realtime stream on every rebuild - that was causing the
+522|  // admin panel to freeze ("app isn't responding") when opening Matches.
+523|  late final Stream<List<MatchModel>> _matchesStream =
+524|      _matchService.getAllMatches();
+525|
+526|  final _teamAController = TextEditingController();
+527|  final _teamBController = TextEditingController();
+528|  final _venueController = TextEditingController();
+529|  final _notesController = TextEditingController();
+530|  final _oddsAController = TextEditingController(text: '1.5');
+531|  final _oddsBController = TextEditingController(text: '2.0');
+532|  String _selectedSport = 'Football';
+533|  DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
+534|  bool _isScheduling = false;
+535|
+536|  final List<String> _sports = [
+537|    'Football',
+538|    'Basketball',
+539|    'Volleyball',
+540|    'Athletics',
+541|    'Other'
+542|  ];
+543|
+544|  @override
+545|  void dispose() {
+546|    _teamAController.dispose();
+547|    _teamBController.dispose();
+548|    _venueController.dispose();
+549|    _notesController.dispose();
+550|    _oddsAController.dispose();
+551|    _oddsBController.dispose();
+552|    super.dispose();
+553|  }
+554|
+555|  @override
+556|  Widget build(BuildContext context) {
+557|    return StreamBuilder<List<MatchModel>>(
+558|      stream: _matchesStream,
+559|      builder: (context, snapshot) {
+560|        final matches = snapshot.data ?? [];
+561|        return ListView.builder(
+562|          padding: const EdgeInsets.all(16),
+563|          itemCount: matches.length + 1,
+564|          itemBuilder: (context, index) {
+565|            if (index == 0) return _buildScheduleForm();
+566|            return _MatchAdminCard(
+567|                match: matches[index - 1], adminId: widget.adminId);
+568|          },
+569|        );
+570|      },
+571|    );
+572|  }
+573|
+574|  // The top section of the tab - the "Schedule a Match" form and the
+575|  // "Manage Matches & Accountability" header. Kept in its own method so the
+576|  // match cards below can be built lazily. Eagerly building dozens of heavy
+577|  // cards was what made the admin panel freeze ("app isn't responding").
+578|  Widget _buildScheduleForm() {
+579|    return Column(
+580|      crossAxisAlignment: CrossAxisAlignment.start,
+581|      children: [
+582|        const Text('Schedule a Match',
+583|            style: TextStyle(
+584|                fontSize: AppSizes.fontLarge, fontWeight: FontWeight.bold)),
+585|        const SizedBox(height: 16),
+586|        const Text('Sport', style: TextStyle(fontWeight: FontWeight.bold)),
+587|        const SizedBox(height: 8),
+588|        SingleChildScrollView(
+589|          scrollDirection: Axis.horizontal,
+590|          child: Row(
+591|            children: _sports.map((sport) {
+592|              final bool isSelected = _selectedSport == sport;
+593|              return GestureDetector(
+594|                onTap: () => setState(() => _selectedSport = sport),
+595|                child: Container(
+596|                  margin: const EdgeInsets.only(right: 8),
+597|                  padding:
+598|                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+599|                  decoration: BoxDecoration(
+600|                    color: isSelected ? AppColors.primary : Colors.white,
+601|                    borderRadius: BorderRadius.circular(20),
+602|                    border: Border.all(
+603|                        color: isSelected
+604|                            ? AppColors.primary
+605|                            : Colors.grey.shade300),
+606|                  ),
+607|                  child: Text(sport,
+608|                      style: TextStyle(
+609|                          color: isSelected ? Colors.white : Colors.grey,
+610|                          fontWeight: isSelected
+611|                              ? FontWeight.bold
+612|                              : FontWeight.normal)),
+613|                ),
+614|              );
+615|            }).toList(),
+616|          ),
+617|        ),
+618|        const SizedBox(height: 16),
+619|        _field(_teamAController, 'Team A Name', Icons.group),
+620|        const SizedBox(height: 12),
+621|        _field(_teamBController, 'Team B Name', Icons.group),
+622|        const SizedBox(height: 12),
+623|        _field(_venueController, 'Venue', Icons.location_on),
+624|        const SizedBox(height: 12),
+625|
+626|        // ODDS FIELDS
+627|        const Text('Set Odds',
+628|            style: TextStyle(
+629|                fontWeight: FontWeight.bold, fontSize: AppSizes.fontSmall)),
+630|        const SizedBox(height: 4),
+631|        Text('Example: Team A = 1.5x means a 1000 UGX bet wins 1500 UGX',
+632|            style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
+633|        const SizedBox(height: 8),
+634|        Row(children: [
+635|          Expanded(
+636|            child: TextField(
+637|              controller: _oddsAController,
+638|              keyboardType:
+639|                  const TextInputType.numberWithOptions(decimal: true),
+640|              decoration: InputDecoration(
+641|                labelText: 'Team A Odds (e.g. 1.5)',
+642|                prefixIcon:
+643|                    const Icon(Icons.trending_up, color: AppColors.primary),
+644|                filled: true,
+645|                fillColor: Colors.white,
+646|                border: OutlineInputBorder(
+647|                    borderRadius: BorderRadius.circular(AppSizes.radiusMedium)),
+648|                focusedBorder: OutlineInputBorder(
+649|                    borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+650|                    borderSide:
+651|                        const BorderSide(color: AppColors.primary, width: 2)),
+652|              ),
+653|            ),
+654|          ),
+655|          const SizedBox(width: 12),
+656|          Expanded(
+657|            child: TextField(
+658|              controller: _oddsBController,
+659|              keyboardType:
+660|                  const TextInputType.numberWithOptions(decimal: true),
+661|              decoration: InputDecoration(
+662|                labelText: 'Team B Odds (e.g. 2.0)',
+663|                prefixIcon: const Icon(Icons.trending_up, color: Colors.orange),
+664|                filled: true,
+665|                fillColor: Colors.white,
+666|                border: OutlineInputBorder(
+667|                    borderRadius: BorderRadius.circular(AppSizes.radiusMedium)),
+668|                focusedBorder: OutlineInputBorder(
+669|                    borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+670|                    borderSide:
+671|                        const BorderSide(color: Colors.orange, width: 2)),
+672|              ),
+673|            ),
+674|          ),
+675|        ]),
+676|        const SizedBox(height: 12),
+677|        GestureDetector(
+678|          onTap: () async {
+679|            final date = await showDatePicker(
+680|                context: context,
+681|                initialDate: _selectedDate,
+682|                firstDate: DateTime.now(),
+683|                lastDate: DateTime.now().add(const Duration(days: 365)));
+684|            if (date != null && !mounted) return;
+685|            if (date != null) {
+686|              final time = await showTimePicker(
+687|                  context: context,
+688|                  initialTime: TimeOfDay.fromDateTime(_selectedDate));
+689|              if (time != null) {
+690|                setState(() {
+691|                  _selectedDate = DateTime(
+692|                      date.year, date.month, date.day, time.hour, time.minute);
+693|                });
+694|              }
+695|            }
+696|          },
+697|          child: Container(
+698|            padding: const EdgeInsets.all(14),
+699|            decoration: BoxDecoration(
+700|                color: Colors.white,
+701|                borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+702|                border: Border.all(color: Colors.grey.shade300)),
+703|            child: Row(children: [
+704|              const Icon(Icons.calendar_today,
+705|                  color: AppColors.primary, size: 20),
+706|              const SizedBox(width: 10),
+707|              Text(
+708|                '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year} at '
+709|                '${_selectedDate.hour.toString().padLeft(2, '0')}:${_selectedDate.minute.toString().padLeft(2, '0')}',
+710|                style: const TextStyle(fontSize: AppSizes.fontSmall),
+711|              ),
+712|            ]),
+713|          ),
+714|        ),
+715|        const SizedBox(height: 12),
+716|        TextField(
+717|          controller: _notesController,
+718|          maxLines: 3,
+719|          decoration: InputDecoration(
+720|            labelText: 'Admin Notes (optional)',
+721|            prefixIcon: const Icon(Icons.notes, color: AppColors.primary),
+722|            filled: true,
+723|            fillColor: Colors.white,
+724|            border: OutlineInputBorder(
+725|                borderRadius: BorderRadius.circular(AppSizes.radiusMedium)),
+726|            focusedBorder: OutlineInputBorder(
+727|                borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+728|                borderSide:
+729|                    const BorderSide(color: AppColors.primary, width: 2)),
+730|          ),
+731|        ),
+732|        const SizedBox(height: 24),
+733|        SizedBox(
+734|          width: double.infinity,
+735|          height: 50,
+736|          child: ElevatedButton.icon(
+737|            onPressed: _isScheduling ? null : _scheduleMatch,
+738|            icon: _isScheduling
+739|                ? const SizedBox(
+740|                    width: 18,
+741|                    height: 18,
+742|                    child: CircularProgressIndicator(
+743|                        color: Colors.white, strokeWidth: 2))
+744|                : const Icon(Icons.sports_soccer),
+745|            label: const Text('Schedule Match'),
+746|            style: ElevatedButton.styleFrom(
+747|                backgroundColor: AppColors.primary,
+748|                foregroundColor: Colors.white,
+749|                shape: RoundedRectangleBorder(
+750|                    borderRadius:
+751|                        BorderRadius.circular(AppSizes.radiusMedium))),
+752|          ),
+753|        ),
+754|        const SizedBox(height: 24),
+755|        const Divider(),
+756|        const SizedBox(height: 16),
+757|        const Text('Manage Matches & Accountability',
+758|            style: TextStyle(
+759|                fontSize: AppSizes.fontMedium, fontWeight: FontWeight.bold)),
+760|        const SizedBox(height: 12),
+761|      ],
+762|    );
+763|  }
+764|
+765|  Future<void> _scheduleMatch() async {
+766|    if (_teamAController.text.trim().isEmpty ||
+767|        _teamBController.text.trim().isEmpty ||
+768|        _venueController.text.trim().isEmpty) {
+769|      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+770|          content: Text('Please fill in all required fields'),
+771|          backgroundColor: AppColors.error));
+772|      return;
+773|    }
+774|    final oddsA = double.tryParse(_oddsAController.text) ?? 1.5;
+775|    final oddsB = double.tryParse(_oddsBController.text) ?? 2.0;
+776|    if (oddsA < 1.01 || oddsB < 1.01) {
+777|      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+778|          content: Text('Odds must be at least 1.01'),
+779|          backgroundColor: AppColors.error));
+780|      return;
+781|    }
+782|    setState(() => _isScheduling = true);
+783|    final result = await MatchService().scheduleMatch(
+784|      sport: _selectedSport,
+785|      teamA: _teamAController.text.trim(),
+786|      teamB: _teamBController.text.trim(),
+787|      venue: _venueController.text.trim(),
+788|      matchDate: _selectedDate,
+789|      oddsA: oddsA,
+790|      oddsB: oddsB,
+791|      adminNotes: _notesController.text.trim(),
+792|    );
+793|    setState(() => _isScheduling = false);
+794|    if (mounted) {
+795|      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+796|        content: Text(result['message']),
+797|        backgroundColor: result['success'] ? Colors.green : AppColors.error,
+798|        behavior: SnackBarBehavior.floating,
+799|      ));
+800|      if (result['success']) {
+801|        _teamAController.clear();
+802|        _teamBController.clear();
+803|        _venueController.clear();
+804|        _notesController.clear();
+805|        _oddsAController.text = '1.5';
+806|        _oddsBController.text = '2.0';
+807|      }
+808|    }
+809|  }
+810|
+811|  Widget _field(TextEditingController c, String label, IconData icon) {
+812|    return TextField(
+813|      controller: c,
+814|      decoration: InputDecoration(
+815|        labelText: label,
+816|        prefixIcon: Icon(icon, color: AppColors.primary),
+817|        filled: true,
+818|        fillColor: Colors.white,
+819|        border: OutlineInputBorder(
+820|            borderRadius: BorderRadius.circular(AppSizes.radiusMedium)),
+821|        focusedBorder: OutlineInputBorder(
+822|            borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+823|            borderSide: const BorderSide(color: AppColors.primary, width: 2)),
+824|      ),
+825|    );
+826|  }
+827|}
+828|
+829|// â”€â”€ MATCH ADMIN CARD with accountability â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+830|
+831|class _MatchAdminCard extends StatefulWidget {
+832|  final MatchModel match;
+833|  final String adminId;
+834|  const _MatchAdminCard({required this.match, required this.adminId});
+835|  @override
+836|  State<_MatchAdminCard> createState() => _MatchAdminCardState();
+837|}
+838|
+839|class _MatchAdminCardState extends State<_MatchAdminCard> {
+840|  late TextEditingController _scoreAController;
+841|  late TextEditingController _scoreBController;
+842|  late TextEditingController _oddsAController;
+843|  late TextEditingController _oddsBController;
+844|  late String _currentStatus;
+845|  bool _showBets = false;
+846|
+847|  @override
+848|  void initState() {
+849|    super.initState();
+850|    _scoreAController =
+851|        TextEditingController(text: widget.match.scoreA.toString());
+852|    _scoreBController =
+853|        TextEditingController(text: widget.match.scoreB.toString());
+854|    _oddsAController =
+855|        TextEditingController(text: widget.match.oddsA.toStringAsFixed(2));
+856|    _oddsBController =
+857|        TextEditingController(text: widget.match.oddsB.toStringAsFixed(2));
+858|    _currentStatus = widget.match.status;
+859|  }
+860|
+861|  @override
+862|  void dispose() {
+863|    _scoreAController.dispose();
+864|    _scoreBController.dispose();
+865|    _oddsAController.dispose();
+866|    _oddsBController.dispose();
+867|    super.dispose();
+868|  }
+869|
+870|  String _fmt(int amount) => amount.toString().replaceAllMapped(
+871|      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]!},');
+872|
+873|  @override
+874|  Widget build(BuildContext context) {
+875|    return Container(
+876|      margin: const EdgeInsets.only(bottom: 16),
+877|      decoration: BoxDecoration(
+878|        color: Colors.white,
+879|        borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+880|        border: Border.all(color: Colors.grey.shade200),
+881|        boxShadow: [
+882|          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)
+883|        ],
+884|      ),
+885|      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+886|        // MATCH HEADER
+887|        Container(
+888|          padding: const EdgeInsets.all(12),
+889|          decoration: BoxDecoration(
+890|            color: AppColors.primary.withOpacity(0.05),
+891|            borderRadius: const BorderRadius.only(
+892|              topLeft: Radius.circular(AppSizes.radiusMedium),
+893|              topRight: Radius.circular(AppSizes.radiusMedium),
+894|            ),
+895|          ),
+896|          child: Row(children: [
+897|            Expanded(
+898|              child: Column(
+899|                  crossAxisAlignment: CrossAxisAlignment.start,
+900|                  children: [

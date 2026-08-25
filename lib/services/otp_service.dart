@@ -110,10 +110,14 @@ Do not share this code with anyone.
     }
   }
 
-  // Verifies the OTP code the user typed
+  // Verifies the OTP code the user typed. `markUserVerified` is true during
+  // signup (also flips the user's isVerified flag); it is false during the
+  // forgot-password flow, when the OTP is stored under a synthetic id that
+  // has no users document to update.
   Future<Map<String, dynamic>> verifyOtp({
     required String userId,
     required String enteredCode,
+    bool markUserVerified = true,
   }) async {
     try {
       DocumentSnapshot doc =
@@ -155,10 +159,14 @@ Do not share this code with anyone.
         'verified': true,
       });
 
-      // Mark user as verified in users collection
-      await _firestore.collection('users').doc(userId).update({
-        'isVerified': true,
-      });
+      // Mark user as verified in users collection (only meaningful during
+      // signup - the forgot-password flow stores the code under a synthetic
+      // id that is not a real users document).
+      if (markUserVerified) {
+        await _firestore.collection('users').doc(userId).update({
+          'isVerified': true,
+        });
+      }
 
       return {
         'success': true,

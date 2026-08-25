@@ -5,6 +5,7 @@ import '../../models/post_model.dart';
 import '../../services/post_service.dart';
 import '../../utils/constants.dart';
 import 'comments_screen.dart';
+import 'create_post_screen.dart';
 
 class HomeFeedScreen extends StatefulWidget {
   const HomeFeedScreen({super.key});
@@ -55,6 +56,20 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
   bool get _isAdmin => _userData?['email'] == AppStrings.adminEmail;
   bool get _isGuest => _userData?['userType'] == 'guest';
 
+  void _openCreatePost() {
+    if (_currentUserId == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CreatePostScreen(
+          userId: _currentUserId!,
+          userName: (_userData?['fullName'] ?? 'User') as String,
+          userType: (_userData?['userType'] ?? 'guest') as String,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoadingUser) {
@@ -85,24 +100,41 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                       color: AppColors.dark,
                     ),
                   ),
-                  if (_isGuest)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Text(
-                        'Guest',
-                        style: TextStyle(
-                          fontSize: AppSizes.fontSmall,
-                          color: Colors.grey,
+                  Row(
+                    children: [
+                      if (_isGuest)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Text(
+                            'Guest',
+                            style: TextStyle(
+                              fontSize: AppSizes.fontSmall,
+                              color: Colors.grey,
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
+                      if (!_isGuest)
+                        TextButton.icon(
+                          onPressed: _openCreatePost,
+                          icon: const Icon(Icons.add_circle_outline,
+                              size: 18, color: AppColors.primary),
+                          label: const Text(
+                            'Create Post',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -499,6 +531,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
   }
 
   void _confirmDelete(String postId) {
+    final outerContext = context;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -516,7 +549,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
               Navigator.pop(context);
               await PostService().deletePost(postId);
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                ScaffoldMessenger.of(outerContext).showSnackBar(
                   const SnackBar(
                     content: Text('Post deleted'),
                     backgroundColor: AppColors.error,
@@ -538,8 +571,10 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
         return AppColors.primary;
       case 'diploma':
         return const Color(0xFF1565C0);
-      default:
+      case 'guest':
         return Colors.grey;
+      default:
+        return AppColors.primary;
     }
   }
 
@@ -549,8 +584,12 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
         return 'Bachelor Student';
       case 'diploma':
         return 'Diploma Student';
-      default:
+      case 'guest':
         return 'Guest';
+      default:
+        // Any other value is a registered student/community member, never a
+        // guest - falling back to "Guest" wrongly flags them.
+        return 'Community Member';
     }
   }
 

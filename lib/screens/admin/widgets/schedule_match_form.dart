@@ -152,6 +152,7 @@ class _ScheduleMatchFormState extends State<ScheduleMatchForm> {
                 initialDate: _selectedDate,
                 firstDate: DateTime.now(),
                 lastDate: DateTime.now().add(const Duration(days: 365)));
+            if (date != null && !mounted) return;
             if (date != null) {
               final time = await showTimePicker(
                   context: context,

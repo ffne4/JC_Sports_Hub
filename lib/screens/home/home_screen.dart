@@ -57,6 +57,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ? FirebaseAuth.instance.currentUser!.displayName![0].toUpperCase()
           : 'U';
 
+  bool _isGuest = false;
+  String _userType = '';
+
   final NotificationService _notificationService = NotificationService();
 
   int get _bottomNavIndex {
@@ -98,7 +101,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _navigateToCreatePost() {
     final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null) return;
+    if (currentUser == null || _isGuest) return;
 
     Navigator.push(
       context,
@@ -106,7 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (_) => CreatePostScreen(
           userId: currentUser.uid,
           userName: currentUser.displayName ?? currentUser.email ?? 'User',
-          userType: 'guest',
+          userType: _userType.isEmpty ? 'guest' : _userType,
         ),
       ),
     );
@@ -130,6 +133,8 @@ class _HomeScreenState extends State<HomeScreen> {
           .get();
       if (doc.exists) {
         final data = doc.data() as Map<String, dynamic>;
+        _isGuest = data['userType'] == 'guest';
+        _userType = (data['userType'] ?? '') as String;
         final isVerified =
             data['isVerified'] == true || user.emailVerified == true;
         if (!isVerified && mounted) {
@@ -577,7 +582,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             body: content,
-            floatingActionButton: _selectedIndex == 0
+            floatingActionButton: _selectedIndex == 0 && !_isGuest
                 ? FloatingActionButton(
                     onPressed: _navigateToCreatePost,
                     backgroundColor: AppColors.primary,

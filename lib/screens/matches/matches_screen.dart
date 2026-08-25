@@ -59,7 +59,7 @@ class _MatchesScreenState extends State<MatchesScreen>
           unselectedLabelColor: Colors.white60,
           tabs: const [
             Tab(text: 'Upcoming'),
-            Tab(text: 'Live 🔴'),
+            Tab(text: 'Live ðŸ”´'),
             Tab(text: 'Completed'),
           ],
         ),
@@ -301,8 +301,8 @@ class _MatchesScreenState extends State<MatchesScreen>
           const SizedBox(height: 12),
 
           // COMPLETED MATCH - show winner
-              if (match.status == MatchStatus.completed ||
-                  match.status == MatchStatus.cancelled) ...[
+          if (match.status == MatchStatus.completed ||
+              match.status == MatchStatus.cancelled) ...[
             const Divider(height: 1),
             Padding(
               padding: const EdgeInsets.all(12),
@@ -327,18 +327,22 @@ class _MatchesScreenState extends State<MatchesScreen>
                                   style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       color: Colors.green)),
-                                   if (match.userVotes.containsKey(_currentUserId))
-                                     Text(
-                                       (match.scoreA > match.scoreB && match.userVotes[_currentUserId] == 'A') ||
-                                           (match.scoreB > match.scoreA && match.userVotes[_currentUserId] == 'B')
-                                           ? 'You won! Check your wallet.'
-                                           : userBet != null
-                                               ? 'Bet: ${_fmtAmt(userBet['amount'] as int? ?? 0)} UGX | Odds: ${(userBet['oddsAtPlacement'] ?? 1.5).toStringAsFixed(2)}x'
-                                               : '',
-                                       style: TextStyle(
-                                           color: Colors.grey.shade600,
-                                           fontSize: 11),
-                                     ),
+                              if (match.userVotes.containsKey(_currentUserId))
+                                Text(
+                                  (match.scoreA > match.scoreB &&
+                                              match.userVotes[_currentUserId] ==
+                                                  'A') ||
+                                          (match.scoreB > match.scoreA &&
+                                              match.userVotes[_currentUserId] ==
+                                                  'B')
+                                      ? 'You won! Check your wallet.'
+                                      : userBet != null
+                                          ? 'Bet: ${_fmtAmt(userBet['amount'] as int? ?? 0)} UGX | Odds: ${(userBet['oddsAtPlacement'] ?? 1.5).toStringAsFixed(2)}x'
+                                          : '',
+                                  style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontSize: 11),
+                                ),
                             ]),
                       ),
                     ]),
@@ -408,7 +412,7 @@ class _MatchesScreenState extends State<MatchesScreen>
                           color: Colors.red, shape: BoxShape.circle),
                     ),
                     const SizedBox(width: 8),
-                    const Text('Match in progress — betting is closed',
+                    const Text('Match in progress â€” betting is closed',
                         style: TextStyle(
                             color: Colors.red,
                             fontSize: AppSizes.fontSmall,
@@ -631,6 +635,7 @@ class _MatchesScreenState extends State<MatchesScreen>
     }
 
     final betController = TextEditingController();
+    final outerContext = context;
 
     showDialog(
       context: context,
@@ -675,54 +680,59 @@ class _MatchesScreenState extends State<MatchesScreen>
             ),
             const SizedBox(height: 4),
             Text(
-                'Example: 1000 UGX × ${odds.toStringAsFixed(2)} = ${_fmtAmt((1000 * odds).floor())} UGX if you win',
+                'Example: 1000 UGX Ã— ${odds.toStringAsFixed(2)} = ${_fmtAmt((1000 * odds).floor())} UGX if you win',
                 style: TextStyle(color: Colors.grey.shade500, fontSize: 10)),
             const SizedBox(height: 12),
-             TextField(
-               controller: betController,
-               keyboardType: TextInputType.number,
-               autofocus: true,
-               onChanged: (val) {
-                 final parsed = int.tryParse(val) ?? 0;
-                 setState(() {
-                   _betAmount = parsed > 0 ? parsed : 0;
-                 });
-               },
-               decoration: InputDecoration(
-                 labelText: 'Bet Amount (UGX)',
-                 hintText: 'Min ${BettingService.minimumBet} UGX',
-                 prefixIcon: const Icon(Icons.money, color: AppColors.primary),
-                 filled: true,
-                 fillColor: Colors.grey.shade50,
-                 border: OutlineInputBorder(
-                     borderRadius: BorderRadius.circular(AppSizes.radiusMedium)),
-                 focusedBorder: OutlineInputBorder(
-                   borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
-                   borderSide:
-                       const BorderSide(color: AppColors.primary, width: 2),
-                 ),
-               ),
-             ),
-             if (_betAmount > 0)
-               Container(
-                 margin: const EdgeInsets.only(top: 10),
-                 padding: const EdgeInsets.all(10),
-                 decoration: BoxDecoration(
-                   color: AppColors.accent.withOpacity(0.08),
-                   borderRadius: BorderRadius.circular(AppSizes.radiusSmall),
-                   border: Border.all(color: AppColors.accent.withOpacity(0.3)),
-                 ),
-                 child: Row(
-                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                   children: [
-                     Text('Expected Return', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
-                     Text(
-                       '${_fmtAmt((_betAmount * odds).floor())} UGX',
-                       style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold, fontSize: 14),
-                     ),
-                   ],
-                 ),
-               ),
+            TextField(
+              controller: betController,
+              keyboardType: TextInputType.number,
+              autofocus: true,
+              onChanged: (val) {
+                final parsed = int.tryParse(val) ?? 0;
+                setState(() {
+                  _betAmount = parsed > 0 ? parsed : 0;
+                });
+              },
+              decoration: InputDecoration(
+                labelText: 'Bet Amount (UGX)',
+                hintText: 'Min ${BettingService.minimumBet} UGX',
+                prefixIcon: const Icon(Icons.money, color: AppColors.primary),
+                filled: true,
+                fillColor: Colors.grey.shade50,
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppSizes.radiusMedium)),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+                  borderSide:
+                      const BorderSide(color: AppColors.primary, width: 2),
+                ),
+              ),
+            ),
+            if (_betAmount > 0)
+              Container(
+                margin: const EdgeInsets.only(top: 10),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.accent.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(AppSizes.radiusSmall),
+                  border: Border.all(color: AppColors.accent.withOpacity(0.3)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Expected Return',
+                        style: TextStyle(
+                            color: Colors.grey.shade600, fontSize: 12)),
+                    Text(
+                      '${_fmtAmt((_betAmount * odds).floor())} UGX',
+                      style: const TextStyle(
+                          color: AppColors.accent,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
         actions: [
@@ -736,7 +746,7 @@ class _MatchesScreenState extends State<MatchesScreen>
               final amount = int.tryParse(betController.text) ?? 0;
 
               if (amount < BettingService.minimumBet) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                ScaffoldMessenger.of(outerContext).showSnackBar(const SnackBar(
                   content:
                       Text('Minimum bet is ${BettingService.minimumBet} UGX'),
                   backgroundColor: AppColors.error,
@@ -744,7 +754,7 @@ class _MatchesScreenState extends State<MatchesScreen>
                 return;
               }
               if (amount > BettingService.maximumBet) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                ScaffoldMessenger.of(outerContext).showSnackBar(SnackBar(
                   content: Text(
                       'Maximum bet is ${_fmtAmt(BettingService.maximumBet)} UGX'),
                   backgroundColor: AppColors.error,
@@ -752,7 +762,7 @@ class _MatchesScreenState extends State<MatchesScreen>
                 return;
               }
               if (amount > balance) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                ScaffoldMessenger.of(outerContext).showSnackBar(const SnackBar(
                   content: Text('Amount exceeds your available balance'),
                   backgroundColor: AppColors.error,
                 ));
@@ -773,7 +783,7 @@ class _MatchesScreenState extends State<MatchesScreen>
               );
 
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                ScaffoldMessenger.of(outerContext).showSnackBar(SnackBar(
                   content: Text(result['success']
                       ? 'Bet placed! ${_fmtAmt(amount)} UGX deducted. If $teamName wins you get ${_fmtAmt(potentialWin)} UGX'
                       : result['message']),
@@ -787,8 +797,9 @@ class _MatchesScreenState extends State<MatchesScreen>
                   Future.delayed(const Duration(milliseconds: 500), () {
                     if (mounted) {
                       Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(builder: (context) => const BetsScreen()),
+                        outerContext,
+                        MaterialPageRoute(
+                            builder: (context) => const BetsScreen()),
                       );
                     }
                   });
@@ -827,15 +838,15 @@ class _MatchesScreenState extends State<MatchesScreen>
   String _getSportIcon(String sport) {
     switch (sport.toLowerCase()) {
       case 'football':
-        return '⚽';
+        return 'âš½';
       case 'basketball':
-        return '🏀';
+        return 'ðŸ€';
       case 'volleyball':
-        return '🏐';
+        return 'ðŸ';
       case 'athletics':
-        return '🏃';
+        return 'ðŸƒ';
       default:
-        return '🏆';
+        return 'ðŸ†';
     }
   }
 
@@ -861,3 +872,4 @@ class _MatchesScreenState extends State<MatchesScreen>
     return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
   }
 }
+

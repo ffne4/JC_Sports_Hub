@@ -54,7 +54,7 @@ class _AdminTournamentsTabState extends State<AdminTournamentsTab> {
           ),
           const SizedBox(height: 16),
           StreamBuilder<List<TournamentModel>>(
-            stream: _tournamentService.getActiveTournaments(),
+            stream: _tournamentService.getAdminTournaments(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(
@@ -121,6 +121,21 @@ class _AdminTournamentsTabState extends State<AdminTournamentsTab> {
                           const SnackBar(
                             content: Text('Fixtures reseeded and points recalculated'),
                             backgroundColor: Colors.green,
+                          ),
+                        );
+                      }
+                    },
+                    onPublish: () async {
+                      final result =
+                          await _tournamentService.publishFixturesToMatches(
+                              tournament.id);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(result['message'] as String? ?? ''),
+                            backgroundColor: result['success'] == true
+                                ? Colors.green
+                                : AppColors.error,
                           ),
                         );
                       }
@@ -207,6 +222,7 @@ class _TournamentCard extends StatelessWidget {
   final VoidCallback onManageRegistration;
   final Function(String) onUpdateStatus;
   final VoidCallback onReseed;
+  final VoidCallback onPublish;
   final VoidCallback onDelete;
 
   const _TournamentCard({
@@ -217,6 +233,7 @@ class _TournamentCard extends StatelessWidget {
     required this.onManageRegistration,
     required this.onUpdateStatus,
     required this.onReseed,
+    required this.onPublish,
     required this.onDelete,
   });
 
@@ -379,6 +396,14 @@ class _TournamentCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: OutlinedButton.icon(
+                    onPressed: onPublish,
+                    icon: Icon(Icons.campaign_outlined, size: 16),
+                    label: Text('Publish', style: TextStyle(fontSize: 12)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
                     onPressed: onReseed,
                     icon: Icon(Icons.refresh, size: 16),
                     label: Text('Reseed', style: TextStyle(fontSize: 12)),
@@ -405,6 +430,217 @@ class _FixturesScreen extends StatelessWidget {
   final TournamentModel tournament;
 
   const _FixturesScreen({required this.tournament});
+
+  Future<void> _editFixture(
+    BuildContext context,
+    TournamentService service,
+    TournamentModel tournament,
+    TournamentFixture fixture,
+  ) async {
+    final home = TextEditingController(text: fixture.homeClan);
+    final away = TextEditingController(text: fixture.awayClan);
+    var game = fixture.game;
+    var category = fixture.category;
+    var timeSlot = fixture.timeSlot;
+    var date = fixture.date;
+    var saveMessage = '';
+    var saved = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          Future<void> pickDate() async {
+            final picked = await showDatePicker(
+              context: dialogContext,
+              initialDate: date,
+              firstDate: DateTime(tournament.registrationOpen.year - 1, 1, 1),
+              lastDate: DateTime(tournament.leagueEnd.year + 1, 12, 31),
+            );
+            if (picked != null) setDialogState(() => date = picked);
+          }
+
+          Future<void> selectGame(String g) async {
+            setDialogState(() {
+              game = g;
+              category = categoryForGame(g);
+              if (category == GameCategory.mindGame) {
+                timeSlot = FixtureTimeSlot.mind_3pm;
+              } else if (timeSlot == FixtureTimeSlot.mind_3pm) {
+                timeSlot = FixtureTimeSlot.slot1_4pm;
+              }
+            });
+          }
+
+          return AlertDialog(
+            title: Text('Edit ${fixture.homeClan} vs ${fixture.awayClan}'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (fixture.result != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(
+                        'Result: ${fixture.homePts} - ${fixture.awayPts} '
+                        '(${fixture.result!.name.toUpperCase()})',
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Game',
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey.shade700)),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final g in tournament.games)
+                              if (game == g)
+                                FilledButton(
+                                  onPressed: () => selectGame(g),
+                                  child: Text(g),
+                                )
+                              else
+                                OutlinedButton(
+                                  onPressed: () => selectGame(g),
+                                  child: Text(g),
+                                ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Time slot',
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey.shade700)),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final slot in FixtureTimeSlot.values)
+                              if (timeSlot == slot)
+                                FilledButton(
+                                  onPressed: () =>
+                                      setDialogState(() => timeSlot = slot),
+                                  child: Text(timeSlotLabel(slot)),
+                                )
+                              else
+                                OutlinedButton(
+                                  onPressed: () =>
+                                      setDialogState(() => timeSlot = slot),
+                                  child: Text(timeSlotLabel(slot)),
+                                ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading:
+                        const Icon(Icons.calendar_today, color: AppColors.primary),
+                    title: Text(
+                      '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}',
+                    ),
+                    subtitle: const Text('Tap to change the date'),
+                    onTap: pickDate,
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: home,
+                    decoration: const InputDecoration(
+                      labelText: 'Home tribe',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: away,
+                    decoration: const InputDecoration(
+                      labelText: 'Away tribe',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  if (home.text.trim().isEmpty || away.text.trim().isEmpty) {
+                    ScaffoldMessenger.of(dialogContext).showSnackBar(
+                      const SnackBar(content: Text('Home and away tribes are required')),
+                    );
+                    return;
+                  }
+                  final edited = TournamentFixture(
+                    id: fixture.id,
+                    tournamentId: fixture.tournamentId,
+                    game: game,
+                    matchDay: fixture.matchDay,
+                    round: fixture.round,
+                    category: category,
+                    timeSlot: timeSlot,
+                    stage: fixture.stage,
+                    date: date,
+                    homeClan: home.text.trim(),
+                    awayClan: away.text.trim(),
+                    result: fixture.result,
+                    homePts: fixture.homePts,
+                    awayPts: fixture.awayPts,
+                    notes: fixture.notes,
+                  );
+                  final result =
+                      await service.updateFixture(tournament.id, edited);
+                  saveMessage = result['message'] as String? ?? '';
+                  saved = result['success'] == true;
+                  if (dialogContext.mounted) Navigator.pop(dialogContext);
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    home.dispose();
+    away.dispose();
+    if (!context.mounted) return;
+    if (saveMessage.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(saveMessage),
+          backgroundColor: saved ? Colors.green : AppColors.error,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -463,16 +699,10 @@ class _FixturesScreen extends StatelessWidget {
               final dayStr = parts[1];
               final game = parts[2];
               final gameFixtures = entry.value;
-              final match1 =
-                  gameFixtures[0].homeClan + ' vs ' + gameFixtures[0].awayClan;
-              final match2 = gameFixtures.length > 1
-                  ? gameFixtures[1].homeClan +
-                      ' vs ' +
-                      gameFixtures[1].awayClan
-                  : '';
               final timeLabel = gameFixtures[0].category == GameCategory.mindGame
                   ? '3:00 PM (both simultaneous)'
-                  : '${timeSlotLabel(FixtureTimeSlot.slot1_4pm)}  /  ${timeSlotLabel(FixtureTimeSlot.slot2_5pm)}';
+                  : '${timeSlotLabel(FixtureTimeSlot.slot1_4pm)}  /  '
+                      '${timeSlotLabel(FixtureTimeSlot.slot2_5pm)}';
 
               final isGoldRow = gameFixtures[0].date.month == 11 &&
                   gameFixtures[0].date.day == 11;
@@ -481,45 +711,57 @@ class _FixturesScreen extends StatelessWidget {
                 margin: const EdgeInsets.only(bottom: 6),
                 color: isGoldRow ? Colors.amber.shade50 : null,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  child: Row(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '$dateStr,$dayStr,$game,$timeLabel',
-                              style: TextStyle(
-                                fontWeight: isGoldRow ? FontWeight.w800 : FontWeight.w600,
-                                fontSize: 12,
-                                color: isGoldRow ? Colors.amber.shade900 : null,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(match1),
-                            if (match2.isNotEmpty) Text(match2),
-                          ],
+                      Text(
+                        '$dateStr,$dayStr,$game,$timeLabel',
+                        style: TextStyle(
+                          fontWeight:
+                              isGoldRow ? FontWeight.w800 : FontWeight.w600,
+                          fontSize: 12,
+                          color: isGoldRow ? Colors.amber.shade900 : null,
                         ),
                       ),
-                      if (gameFixtures[0].result != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            '${gameFixtures[0].homePts} - ${gameFixtures[0].awayPts}',
-                            style: const TextStyle(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
+                      const SizedBox(height: 6),
+                      for (final fixture in gameFixtures)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                    '${fixture.homeClan} vs ${fixture.awayClan}'),
+                              ),
+                              if (fixture.result != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 6),
+                                  child: Text(
+                                    '${fixture.homePts} - ${fixture.awayPts}',
+                                    style: const TextStyle(
+                                      color: AppColors.primary,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              SizedBox(
+                                width: 28,
+                                height: 28,
+                                child: IconButton(
+                                  padding: EdgeInsets.zero,
+                                  iconSize: 16,
+                                  visualDensity: VisualDensity.compact,
+                                  color: Colors.grey.shade600,
+                                  icon: const Icon(Icons.edit_outlined),
+                                  tooltip: 'Edit fixture',
+                                  onPressed: () => _editFixture(
+                                      context, service, tournament, fixture),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                     ],

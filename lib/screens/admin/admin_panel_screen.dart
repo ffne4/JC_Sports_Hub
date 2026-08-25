@@ -227,6 +227,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   }
 
   void _confirmReject(String postId) {
+    final outerContext = context;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -242,7 +243,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
               Navigator.pop(context);
               await _postService.deletePost(postId);
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                ScaffoldMessenger.of(outerContext).showSnackBar(const SnackBar(
                   content: Text('Post rejected.'),
                   backgroundColor: AppColors.error,
                   behavior: SnackBarBehavior.floating,
@@ -505,7 +506,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       ]),
     );
   }
-
 }
 
 class _MatchesTabWidget extends StatefulWidget {
@@ -681,6 +681,7 @@ class _MatchesTabWidgetState extends State<_MatchesTabWidget> {
                 initialDate: _selectedDate,
                 firstDate: DateTime.now(),
                 lastDate: DateTime.now().add(const Duration(days: 365)));
+            if (date != null && !mounted) return;
             if (date != null) {
               final time = await showTimePicker(
                   context: context,

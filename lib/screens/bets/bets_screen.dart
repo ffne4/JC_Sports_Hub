@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../models/bet_model.dart';
 import '../../services/betting_service.dart';
@@ -12,7 +13,8 @@ class BetsScreen extends StatefulWidget {
 
 class _BetsScreenState extends State<BetsScreen>
     with SingleTickerProviderStateMixin {
-  final BetService _betService = BetService();
+  final BettingService _bettingService = BettingService();
+  final String? _userId = FirebaseAuth.instance.currentUser?.uid;
   late TabController _tabController;
 
   @override
@@ -61,9 +63,11 @@ class _BetsScreenState extends State<BetsScreen>
     );
   }
 
-  Widget _buildBetList(BetStatus status) {
+  Widget _buildBetList(String status) {
     return StreamBuilder<List<BetModel>>(
-      stream: _betService.getUserBets(),
+      stream: _userId != null
+          ? _bettingService.getMyBets(_userId!)
+          : const Stream.empty(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
@@ -148,33 +152,15 @@ class _BetCard extends StatelessWidget {
   const _BetCard({required this.bet});
 
   Color _getStatusColor() {
-    switch (bet.status) {
-      case BetStatus.won:
-        return Colors.green;
-      case BetStatus.lost:
-        return Colors.red;
-      case BetStatus.refunded:
-        return Colors.orange;
-      case BetStatus.cancelled:
-        return Colors.grey;
-      case BetStatus.pending:
-        return Colors.blue;
-    }
+    if (bet.status == BetStatus.won) return Colors.green;
+    if (bet.status == BetStatus.lost) return Colors.red;
+    return Colors.orange; // pending
   }
 
   String _getStatusLabel() {
-    switch (bet.status) {
-      case BetStatus.won:
-        return 'WON';
-      case BetStatus.lost:
-        return 'LOST';
-      case BetStatus.refunded:
-        return 'REFUNDED';
-      case BetStatus.cancelled:
-        return 'CANCELLED';
-      case BetStatus.pending:
-        return 'PENDING';
-    }
+    if (bet.status == BetStatus.won) return 'WON';
+    if (bet.status == BetStatus.lost) return 'LOST';
+    return 'PENDING';
   }
 
   @override
@@ -194,7 +180,7 @@ class _BetCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    bet.matchName,
+                    bet.matchLabel,
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: AppSizes.fontSmall,
@@ -231,7 +217,7 @@ class _BetCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    'On ${bet.betTeamName}',
+                    'On Team ${bet.selection}',
                     style: const TextStyle(
                       color: AppColors.primary,
                       fontWeight: FontWeight.bold,
@@ -248,7 +234,7 @@ class _BetCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    '${bet.oddsAtPlacement.toStringAsFixed(2)}x',
+                    '${bet.odds.toStringAsFixed(2)}x',
                     style: const TextStyle(
                       color: Colors.orange,
                       fontWeight: FontWeight.bold,
@@ -271,7 +257,7 @@ class _BetCard extends StatelessWidget {
                           TextStyle(color: Colors.grey.shade500, fontSize: 11),
                     ),
                     Text(
-                      '${bet.amount} UGX',
+                      '${bet.stakeAmount.toInt()} UGX',
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ],
@@ -304,20 +290,13 @@ class _BetCard extends StatelessWidget {
                           TextStyle(color: Colors.grey.shade500, fontSize: 11),
                     ),
                     Text(
-                      '${bet.createdAt.day}/${bet.createdAt.month}/${bet.createdAt.year}',
+                      '${bet.placedAt.day}/${bet.placedAt.month}/${bet.placedAt.year}',
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
               ],
             ),
-            if (bet.reference != null) ...[
-              const SizedBox(height: 6),
-              Text(
-                'Ref: ${bet.reference}',
-                style: TextStyle(color: Colors.grey.shade400, fontSize: 10),
-              ),
-            ],
           ],
         ),
       ),

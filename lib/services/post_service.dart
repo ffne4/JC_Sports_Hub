@@ -115,11 +115,28 @@ class PostService {
             snapshot.docs.map((doc) => PostModel.fromFirestore(doc)).toList());
   }
 
-  // Admin only - approves a post making it visible to everyone
+  // Admin only - approves a post making it visible to everyone. The author
+  // gets an in-app notification so they know it went live.
   Future<void> approvePost(String postId) async {
+    final postDoc = await _firestore.collection(_collection).doc(postId).get();
     await _firestore.collection(_collection).doc(postId).update({
       'status': 'approved',
     });
+    if (postDoc.exists) {
+      final userId =
+          (postDoc.data() as Map<String, dynamic>)['userId'] ?? '';
+      if (userId is String && userId.isNotEmpty) {
+        await _firestore.collection('notifications').add({
+          'userId': userId,
+          'title': 'Post approved 🎉',
+          'message': 'Your post is now live in the community feed.',
+          'type': 'post',
+          'isRead': false,
+          'createdAt': FieldValue.serverTimestamp(),
+          'referenceId': postId,
+        });
+      }
+    }
   }
 
   // Admin only - rejects and deletes a post

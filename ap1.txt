@@ -1,0 +1,409 @@
+﻿92|  }
+93|
+94|  Widget _buildPendingPostsTab() {
+95|    return StreamBuilder<List<PostModel>>(
+96|      stream: _pendingPostsStream,
+97|      builder: (context, snapshot) {
+98|        if (snapshot.connectionState == ConnectionState.waiting) {
+99|          return const Center(
+100|              child: CircularProgressIndicator(color: AppColors.primary));
+101|        }
+102|        final posts = snapshot.data ?? [];
+103|        if (posts.isEmpty) {
+104|          return Center(
+105|              child: Column(
+106|                  mainAxisAlignment: MainAxisAlignment.center,
+107|                  children: [
+108|                Icon(Icons.check_circle_outline,
+109|                    size: 60, color: Colors.green.shade300),
+110|                const SizedBox(height: 16),
+111|                const Text('No pending posts!',
+112|                    style: TextStyle(
+113|                        fontSize: AppSizes.fontLarge,
+114|                        fontWeight: FontWeight.bold)),
+115|              ]));
+116|        }
+117|        return ListView.builder(
+118|          padding: const EdgeInsets.all(16),
+119|          itemCount: posts.length,
+120|          itemBuilder: (context, index) => _buildPendingPostCard(posts[index]),
+121|        );
+122|      },
+123|    );
+124|  }
+125|
+126|  Widget _buildPendingPostCard(PostModel post) {
+127|    return Container(
+128|      margin: const EdgeInsets.only(bottom: 12),
+129|      decoration: BoxDecoration(
+130|        color: Colors.white,
+131|        borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+132|        border: Border.all(color: Colors.orange.shade200),
+133|        boxShadow: [
+134|          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8)
+135|        ],
+136|      ),
+137|      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+138|        Container(
+139|          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+140|          decoration: BoxDecoration(
+141|            color: Colors.orange.shade50,
+142|            borderRadius: const BorderRadius.only(
+143|              topLeft: Radius.circular(AppSizes.radiusMedium),
+144|              topRight: Radius.circular(AppSizes.radiusMedium),
+145|            ),
+146|          ),
+147|          child: Row(children: [
+148|            const Icon(Icons.pending, color: Colors.orange, size: 16),
+149|            const SizedBox(width: 6),
+150|            Expanded(
+151|                child: Text('${post.userName} - ${post.userType}',
+152|                    style: const TextStyle(
+153|                        fontWeight: FontWeight.bold,
+154|                        fontSize: AppSizes.fontSmall))),
+155|            Container(
+156|              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+157|              decoration: BoxDecoration(
+158|                  color: Colors.orange,
+159|                  borderRadius: BorderRadius.circular(12)),
+160|              child: const Text('PENDING',
+161|                  style: TextStyle(
+162|                      color: Colors.white,
+163|                      fontSize: 10,
+164|                      fontWeight: FontWeight.bold)),
+165|            ),
+166|          ]),
+167|        ),
+168|        Padding(
+169|          padding: const EdgeInsets.all(12),
+170|          child:
+171|              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+172|            Text(post.content,
+173|                style: const TextStyle(fontSize: AppSizes.fontSmall)),
+174|            if (post.imageUrl.isNotEmpty) ...[
+175|              const SizedBox(height: 8),
+176|              ClipRRect(
+177|                borderRadius: BorderRadius.circular(AppSizes.radiusSmall),
+178|                child: Image.network(post.imageUrl,
+179|                    height: 150, width: double.infinity, fit: BoxFit.cover),
+180|              ),
+181|            ],
+182|          ]),
+183|        ),
+184|        Padding(
+185|          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+186|          child: Row(children: [
+187|            Expanded(
+188|              child: ElevatedButton.icon(
+189|                onPressed: () async {
+190|                  await _postService.approvePost(post.id);
+191|                  if (mounted) {
+192|                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+193|                      content: Text('Post approved!'),
+194|                      backgroundColor: Colors.green,
+195|                      behavior: SnackBarBehavior.floating,
+196|                    ));
+197|                  }
+198|                },
+199|                icon: const Icon(Icons.check, size: 18),
+200|                label: const Text('Approve'),
+201|                style: ElevatedButton.styleFrom(
+202|                    backgroundColor: Colors.green,
+203|                    foregroundColor: Colors.white,
+204|                    shape: RoundedRectangleBorder(
+205|                        borderRadius:
+206|                            BorderRadius.circular(AppSizes.radiusMedium))),
+207|              ),
+208|            ),
+209|            const SizedBox(width: 8),
+210|            Expanded(
+211|              child: ElevatedButton.icon(
+212|                onPressed: () => _confirmReject(post.id),
+213|                icon: const Icon(Icons.close, size: 18),
+214|                label: const Text('Reject'),
+215|                style: ElevatedButton.styleFrom(
+216|                    backgroundColor: AppColors.error,
+217|                    foregroundColor: Colors.white,
+218|                    shape: RoundedRectangleBorder(
+219|                        borderRadius:
+220|                            BorderRadius.circular(AppSizes.radiusMedium))),
+221|              ),
+222|            ),
+223|          ]),
+224|        ),
+225|      ]),
+226|    );
+227|  }
+228|
+229|  void _confirmReject(String postId) {
+230|    final outerContext = context;
+231|    showDialog(
+232|      context: context,
+233|      builder: (context) => AlertDialog(
+234|        title: const Text('Reject Post'),
+235|        content:
+236|            const Text('Are you sure you want to reject and delete this post?'),
+237|        actions: [
+238|          TextButton(
+239|              onPressed: () => Navigator.pop(context),
+240|              child: const Text('Cancel')),
+241|          ElevatedButton(
+242|            onPressed: () async {
+243|              Navigator.pop(context);
+244|              await _postService.deletePost(postId);
+245|              if (mounted) {
+246|                ScaffoldMessenger.of(outerContext).showSnackBar(const SnackBar(
+247|                  content: Text('Post rejected.'),
+248|                  backgroundColor: AppColors.error,
+249|                  behavior: SnackBarBehavior.floating,
+250|                ));
+251|              }
+252|            },
+253|            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+254|            child: const Text('Reject', style: TextStyle(color: Colors.white)),
+255|          ),
+256|        ],
+257|      ),
+258|    );
+259|  }
+260|
+261|  Widget _buildAnnouncementsTab() {
+262|    return SingleChildScrollView(
+263|      padding: const EdgeInsets.all(16),
+264|      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+265|        const Text('Post Announcement',
+266|            style: TextStyle(
+267|                fontSize: AppSizes.fontLarge, fontWeight: FontWeight.bold)),
+268|        const SizedBox(height: 16),
+269|        TextField(
+270|          controller: _announcementController,
+271|          maxLines: 5,
+272|          maxLength: 500,
+273|          decoration: InputDecoration(
+274|            hintText: 'Type your announcement here...',
+275|            filled: true,
+276|            fillColor: Colors.white,
+277|            border: OutlineInputBorder(
+278|                borderRadius: BorderRadius.circular(AppSizes.radiusMedium)),
+279|            focusedBorder: OutlineInputBorder(
+280|              borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+281|              borderSide: const BorderSide(color: AppColors.primary, width: 2),
+282|            ),
+283|          ),
+284|        ),
+285|        const SizedBox(height: 12),
+286|        SizedBox(
+287|          width: double.infinity,
+288|          height: 50,
+289|          child: ElevatedButton.icon(
+290|            onPressed: _isPostingAnnouncement ? null : _postAnnouncement,
+291|            icon: _isPostingAnnouncement
+292|                ? const SizedBox(
+293|                    width: 18,
+294|                    height: 18,
+295|                    child: CircularProgressIndicator(
+296|                        color: Colors.white, strokeWidth: 2))
+297|                : const Icon(Icons.campaign),
+298|            label: const Text('Post Announcement'),
+299|            style: ElevatedButton.styleFrom(
+300|                backgroundColor: AppColors.primary,
+301|                foregroundColor: Colors.white,
+302|                shape: RoundedRectangleBorder(
+303|                    borderRadius:
+304|                        BorderRadius.circular(AppSizes.radiusMedium))),
+305|          ),
+306|        ),
+307|        const SizedBox(height: 24),
+308|        const Divider(),
+309|        const SizedBox(height: 16),
+310|        const Text('Past Announcements',
+311|            style: TextStyle(
+312|                fontSize: AppSizes.fontMedium, fontWeight: FontWeight.bold)),
+313|        const SizedBox(height: 12),
+314|        StreamBuilder<List<PostModel>>(
+315|          stream: _announcementsStream,
+316|          builder: (context, snapshot) {
+317|            final list = snapshot.data ?? [];
+318|            if (list.isEmpty) {
+319|              return Text('No announcements yet.',
+320|                  style: TextStyle(color: Colors.grey.shade500));
+321|            }
+322|            return Column(
+323|                children: list
+324|                    .map((a) => Container(
+325|                          margin: const EdgeInsets.only(bottom: 8),
+326|                          padding: const EdgeInsets.all(12),
+327|                          decoration: BoxDecoration(
+328|                              color: Colors.white,
+329|                              borderRadius:
+330|                                  BorderRadius.circular(AppSizes.radiusMedium),
+331|                              border: Border.all(color: Colors.grey.shade200)),
+332|                          child: Row(
+333|                              crossAxisAlignment: CrossAxisAlignment.start,
+334|                              children: [
+335|                                const Icon(Icons.campaign,
+336|                                    color: AppColors.primary, size: 20),
+337|                                const SizedBox(width: 10),
+338|                                Expanded(
+339|                                    child: Text(a.content,
+340|                                        style: const TextStyle(
+341|                                            fontSize: AppSizes.fontSmall))),
+342|                                IconButton(
+343|                                    icon: const Icon(Icons.delete_outline,
+344|                                        color: AppColors.error, size: 18),
+345|                                    onPressed: () =>
+346|                                        _postService.deletePost(a.id),
+347|                                    padding: EdgeInsets.zero,
+348|                                    constraints: const BoxConstraints()),
+349|                              ]),
+350|                        ))
+351|                    .toList());
+352|          },
+353|        ),
+354|      ]),
+355|    );
+356|  }
+357|
+358|  void _postAnnouncement() async {
+359|    if (_announcementController.text.trim().isEmpty) return;
+360|    setState(() => _isPostingAnnouncement = true);
+361|    try {
+362|      await FirebaseFirestore.instance.collection('posts').add({
+363|        'userId': 'admin',
+364|        'userName': 'Admin',
+365|        'userType': 'admin',
+366|        'content': _announcementController.text.trim(),
+367|        'imageUrl': '',
+368|        'status': 'approved',
+369|        'isAnnouncement': true,
+370|        'likeCount': 0,
+371|        'likedBy': [],
+372|        'commentCount': 0,
+373|        'createdAt': FieldValue.serverTimestamp(),
+374|        'sport': 'General',
+375|      });
+376|      setState(() => _isPostingAnnouncement = false);
+377|      _announcementController.clear();
+378|      if (mounted) {
+379|        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+380|          content: Text('Announcement posted!'),
+381|          backgroundColor: Colors.green,
+382|          behavior: SnackBarBehavior.floating,
+383|        ));
+384|      }
+385|    } catch (e) {
+386|      setState(() => _isPostingAnnouncement = false);
+387|    }
+388|  }
+389|
+390|  Widget _buildSuggestionsTab() {
+391|    return StreamBuilder<QuerySnapshot>(
+392|      stream: FirebaseFirestore.instance
+393|          .collection('suggestions')
+394|          .orderBy('createdAt', descending: true)
+395|          .snapshots(),
+396|      builder: (context, snapshot) {
+397|        if (snapshot.connectionState == ConnectionState.waiting) {
+398|          return const Center(
+399|              child: CircularProgressIndicator(color: AppColors.primary));
+400|        }
+401|        final docs = snapshot.data?.docs ?? [];
+402|        if (docs.isEmpty) {
+403|          return Center(
+404|              child: Column(
+405|                  mainAxisAlignment: MainAxisAlignment.center,
+406|                  children: [
+407|                Icon(Icons.lightbulb_outline,
+408|                    size: 60, color: Colors.grey.shade300),
+409|                const SizedBox(height: 16),
+410|                const Text('No suggestions yet',
+411|                    style: TextStyle(
+412|                        fontSize: AppSizes.fontLarge,
+413|                        fontWeight: FontWeight.bold)),
+414|              ]));
+415|        }
+416|        return ListView.builder(
+417|          padding: const EdgeInsets.all(16),
+418|          itemCount: docs.length,
+419|          itemBuilder: (context, index) {
+420|            final data = docs[index].data() as Map<String, dynamic>;
+421|            return _buildSuggestionCard(docs[index].id, data);
+422|          },
+423|        );
+424|      },
+425|    );
+426|  }
+427|
+428|  Widget _buildSuggestionCard(String docId, Map<String, dynamic> data) {
+429|    final replyController =
+430|        TextEditingController(text: data['adminReply'] ?? '');
+431|    return Container(
+432|      margin: const EdgeInsets.only(bottom: 12),
+433|      padding: const EdgeInsets.all(12),
+434|      decoration: BoxDecoration(
+435|          color: Colors.white,
+436|          borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+437|          boxShadow: [
+438|            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8)
+439|          ]),
+440|      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+441|        Row(children: [
+442|          const Icon(Icons.person, color: AppColors.primary, size: 16),
+443|          const SizedBox(width: 6),
+444|          Text(data['userName'] ?? 'Unknown',
+445|              style: const TextStyle(fontWeight: FontWeight.bold)),
+446|          const Spacer(),
+447|          if (data['adminReply'] != null &&
+448|              data['adminReply'].toString().isNotEmpty)
+449|            Container(
+450|              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+451|              decoration: BoxDecoration(
+452|                  color: Colors.green.shade100,
+453|                  borderRadius: BorderRadius.circular(12)),
+454|              child: const Text('Replied',
+455|                  style: TextStyle(
+456|                      color: Colors.green,
+457|                      fontSize: 10,
+458|                      fontWeight: FontWeight.bold)),
+459|            ),
+460|        ]),
+461|        const SizedBox(height: 8),
+462|        Text(data['content'] ?? '',
+463|            style: const TextStyle(fontSize: AppSizes.fontSmall)),
+464|        const SizedBox(height: 12),
+465|        TextField(
+466|          controller: replyController,
+467|          maxLines: 2,
+468|          decoration: InputDecoration(
+469|            hintText: 'Type your reply...',
+470|            filled: true,
+471|            fillColor: Colors.grey.shade50,
+472|            border: OutlineInputBorder(
+473|                borderRadius: BorderRadius.circular(AppSizes.radiusSmall)),
+474|            focusedBorder: OutlineInputBorder(
+475|                borderRadius: BorderRadius.circular(AppSizes.radiusSmall),
+476|                borderSide: const BorderSide(color: AppColors.primary)),
+477|          ),
+478|        ),
+479|        const SizedBox(height: 8),
+480|        Align(
+481|          alignment: Alignment.centerRight,
+482|          child: ElevatedButton.icon(
+483|            onPressed: () async {
+484|              if (replyController.text.trim().isEmpty) return;
+485|              await FirebaseFirestore.instance
+486|                  .collection('suggestions')
+487|                  .doc(docId)
+488|                  .update({'adminReply': replyController.text.trim()});
+489|              if (mounted) {
+490|                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+491|                  content: Text('Reply sent!'),
+492|                  backgroundColor: Colors.green,
+493|                  behavior: SnackBarBehavior.floating,
+494|                ));
+495|              }
+496|            },
+497|            icon: const Icon(Icons.send, size: 16),
+498|            label: const Text('Send Reply'),
+499|            style: ElevatedButton.styleFrom(
+500|                backgroundColor: AppColors.primary,
