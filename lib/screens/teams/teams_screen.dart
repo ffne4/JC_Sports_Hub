@@ -16,9 +16,12 @@ class _TeamsScreenState extends State<TeamsScreen> {
   // Predefined sports teams at JC Campus
   final List<Map<String, dynamic>> _sports = [
     {'name': 'Football', 'icon': '⚽', 'color': 0xFF1B5E20},
+    {'name': 'Basketball', 'icon': '🏀', 'color': 0xFFE65100},
     {'name': 'Volleyball', 'icon': '🏐', 'color': 0xFF6A1B9A},
-    {'name': 'Athletics', 'icon': '🏃', 'color': 0xFFE65100},
-    {'name': 'Netball', 'icon': '🎯', 'color': 0xFFC62828},
+    {'name': 'Athletics', 'icon': '🏃', 'color': 0xFF283593},
+    {'name': 'Netball', 'icon': '🥅', 'color': 0xFFC62828},
+    {'name': 'Chess', 'icon': '♟️', 'color': 0xFF37474F},
+    {'name': 'Dart', 'icon': '🎯', 'color': 0xFF00838F},
   ];
 
   @override
@@ -39,19 +42,23 @@ class _TeamsScreenState extends State<TeamsScreen> {
   }
 
   bool get _isGuest => _userData?['userType'] == 'guest';
-  bool get _isAdmin => _userData?['email'] == AppStrings.adminEmail;
+  bool get _isAdmin =>
+      _userData?['isAdmin'] == true || // role-equivalent flag in Firestore
+      _userData?['role'] == 'admin' ||
+      _userData?['email'] == AppStrings.adminEmail;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.primary,
-        automaticallyImplyLeading: false,
-        title: const Text('Teams',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-      ),
-      body: ListView(
+    final Widget body;
+    if (_isGuest) {
+      // Guests (anonymous users) cannot view or register for school teams -
+      // they must create/join a registered account first.
+      body = _buildGuestRestricted();
+    } else if (_userData == null) {
+      body = const Center(
+          child: CircularProgressIndicator(color: AppColors.primary));
+    } else {
+      body = ListView(
         padding: const EdgeInsets.all(16),
         children: [
           // HEADER
@@ -120,6 +127,74 @@ class _TeamsScreenState extends State<TeamsScreen> {
             },
           ),
         ],
+      );
+    }
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: AppColors.primary,
+        automaticallyImplyLeading: false,
+        title: const Text('Teams',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      ),
+      body: body,
+    );
+  }
+
+  Widget _buildGuestRestricted() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.lock_outline,
+                  color: AppColors.primary, size: 40),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Only registered students can view and register for school teams',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: AppSizes.fontMedium,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Create an account or sign in to join a team and be part of the JC Campus squads.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pushReplacementNamed(context, '/onboarding');
+                },
+                icon: const Icon(Icons.person_add_alt),
+                label: const Text('Create Account / Sign In'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.circular(AppSizes.radiusMedium),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

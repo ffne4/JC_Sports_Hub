@@ -7,7 +7,13 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if owner(uid) || admin();
       allow create: if owner(uid) && request.resource.data.isAdmin == false && request.resource.data.isVerified == false;
-      allow update: if owner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fullName', 'momoNumber', 'profileImage']);
+      // Owner manages their own profile AND wallet figure (bets deduct the
+      // balance, a withdrawal request moves it to pendingWithdrawal, balance
+      // updates on a bet win), so those fields update in-app for the owner.
+      allow update: if (owner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fullName', 'momoNumber', 'profileImage', 'avatar', 'walletBalance', 'pendingWithdrawal']))
+        // Admin also moves these figures when confirming/rejecting a deposit
+        // or withdrawal request.
+        || (admin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['walletBalance', 'pendingWithdrawal']));
     }
     match /otps/{id} {
       // OTP codes are random 6-digit codes that expire in 10 minutes and are
@@ -17,7 +23,17 @@ service cloud.firestore {
       // can't be used to do anything beyond verifying an email the user has.
       allow read, write: if true;
     }
-    match /transactions/{id} { allow read: if owner(resource.data.userId) || admin(); allow write: if false; }
+    match /transactions/{id} {
+      // A signed-in user can list/read their own transactions, and a user can
+      // CREATE their own pending deposit or withdrawal request. Only an admin
+      // may finalise (confirm/reject/delete) a transaction.
+      allow read: if owner(resource.data.userId) || admin();
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.type in ['deposit', 'withdrawal']
+        && request.resource.data.status == 'pending';
+      allow update, delete: if admin();
+    }
     match /bets/{id} { allow read: if owner(resource.data.userId) || admin(); allow write: if false; }
     match /matches/{id} { allow read: if signedIn(); allow write: if admin(); }
     match /posts/{id} {
@@ -32,7 +48,13 @@ service cloud.firestore {
     }
     match /notifications/{id} { allow read, update: if owner(resource.data.userId); }
     match /suggestions/{id} { allow create: if signedIn() && request.resource.data.userId == request.auth.uid; allow read, update: if admin(); }
-    match /teams/{id} { allow read: if signedIn(); allow create: if signedIn() && request.resource.data.userId == request.auth.uid; allow update, delete: if admin(); }
+    match /teams/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType != 'guest';
+      allow update, delete: if admin();
+    }
     match /tournaments/{id} {
       allow read: if signedIn();
       allow write: if admin();

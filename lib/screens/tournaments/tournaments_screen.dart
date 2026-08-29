@@ -1,4 +1,5 @@
 // lib/screens/tournaments/tournaments_screen.dart
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -18,6 +19,7 @@ class _TournamentsScreenState extends State<TournamentsScreen>
     with SingleTickerProviderStateMixin {
   final TournamentService _tournamentService = TournamentService();
   late TabController _tabController;
+  StreamSubscription<TournamentModel?>? _tournamentSub;
   TournamentModel? _currentTournament;
   bool _isLoading = true;
   String? _selectedCourse;
@@ -27,23 +29,28 @@ class _TournamentsScreenState extends State<TournamentsScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
-    _loadCurrentTournament();
+    // Live stream: any admin edit (status, dates, publish, delete) on the
+    // tournaments collection is reflected here in real time.
+    _tournamentSub = _tournamentService.getCurrentTournament().listen(
+          (tournament) {
+        if (!mounted) return;
+        setState(() {
+          _currentTournament = tournament;
+          _isLoading = false;
+        });
+      },
+      onError: (e) {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+      },
+    );
   }
 
   @override
   void dispose() {
+    _tournamentSub?.cancel();
     _tabController.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadCurrentTournament() async {
-    final tournament = await _tournamentService.getCurrentTournament().first;
-    if (mounted) {
-      setState(() {
-        _currentTournament = tournament;
-        _isLoading = false;
-      });
-    }
   }
 
   @override
@@ -111,13 +118,19 @@ class _TournamentsScreenState extends State<TournamentsScreen>
                       ),
                       const SizedBox(height: 8),
                       Text(
+                        tournament.campus,
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 13),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
                         'Season ${tournament.season}',
                         style: const TextStyle(
                             color: Colors.white70, fontSize: 14),
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        'Inter-clan league: ${tournament.clans.length} clans, ${tournament.games.length} games, 6 match-days.',
+                        'Inter-clan league: ${tournament.clans.length} clans, ${tournament.games.length} games.',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 13,

@@ -53,6 +53,7 @@ class FixtureResult {
 class TournamentModel {
   final String id;
   final String name;
+  final String campus;
   final String season;
   final TournamentStatus status;
   final DateTime registrationOpen;
@@ -71,6 +72,7 @@ class TournamentModel {
   TournamentModel({
     required this.id,
     required this.name,
+    this.campus = 'Makerere University Jinja Campus',
     required this.season,
     required this.status,
     required this.registrationOpen,
@@ -112,6 +114,7 @@ class TournamentModel {
     return TournamentModel(
       id: docId,
       name: map['name'] ?? '',
+      campus: map['campus'] ?? 'Makerere University Jinja Campus',
       season: map['season'] ?? '',
       status: parseStatus(map['status']),
       registrationOpen: parseDate(map['registrationOpen']),
@@ -137,6 +140,7 @@ class TournamentModel {
   Map<String, dynamic> toMap() {
     return {
       'name': name,
+      'campus': campus,
       'season': season,
       'status': status.name,
       'registrationOpen': Timestamp.fromDate(registrationOpen),

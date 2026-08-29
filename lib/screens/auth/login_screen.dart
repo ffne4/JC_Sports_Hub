@@ -299,7 +299,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 children: [
                   if (step == 1) ...[
                     Text(
-                      'Enter your email and we will send you a 6-digit verification code:',
+                      'Enter your email and we will send you a password reset link:',
                       style: TextStyle(
                         color: Colors.grey.shade600,
                         fontSize: AppSizes.fontSmall,
@@ -430,31 +430,29 @@ class _LoginScreenState extends State<LoginScreen> {
                           }
                           if (dialogContext.mounted)
                             setDialogState(() => isWorking = true);
-                          final result = await _authService
-                              .sendForgotPasswordOtp(email: email);
+                          // Standard Firebase Auth password reset - this uses
+                          // Firebase's own email template/action link, so a
+                          // reset email is actually delivered (unlike custom
+                          // SMTP/OTP which can silently fail).
+                          final result =
+                              await _authService.resetPassword(email: email);
                           if (dialogContext.mounted)
                             setDialogState(() => isWorking = false);
                           if (!mounted) return;
-                          if (result['success'] == true) {
-                            resetUserId = result['userId'] as String?;
-                            resetEmail = email;
-                            if (dialogContext.mounted)
-                              setDialogState(() => step = 2);
-                            ScaffoldMessenger.of(outerContext).showSnackBar(
-                              SnackBar(
-                                content: Text(result['message']),
-                                backgroundColor: AppColors.accent,
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                          } else {
-                            ScaffoldMessenger.of(outerContext).showSnackBar(
-                              SnackBar(
-                                content: Text(result['message']),
-                                backgroundColor: AppColors.error,
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
+                          ScaffoldMessenger.of(outerContext).showSnackBar(
+                            SnackBar(
+                              content: Text(result['message']),
+                              backgroundColor: result['success'] == true
+                                  ? AppColors.accent
+                                  : AppColors.error,
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                          // On success, close the dialog - the user resets
+                          // their password via the emailed link, then logs in.
+                          if (result['success'] == true &&
+                              dialogContext.mounted) {
+                            Navigator.pop(dialogContext);
                           }
                         } else if (step == 2) {
                           final code = otpController.text.trim();
@@ -582,9 +580,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Text(
                   isWorking
                       ? 'Please wait...'
-                      : (step == 1
-                          ? 'Send Code'
-                          : (step == 2 ? 'Verify Code' : 'Set New Password')),
+                      : 'Send Reset Link',
                   style: const TextStyle(color: Colors.white),
                 ),
               ),

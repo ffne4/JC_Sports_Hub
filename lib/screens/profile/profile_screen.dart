@@ -71,19 +71,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     GestureDetector(
                       onTap: () async {
                         Navigator.pop(dialogContext);
-                        await FirebaseFirestore.instance
-                            .collection('users')
-                            .doc(_currentUserId!)
-                            .update({'avatar': avatar.name});
-                        await _loadUserData();
-                        if (stateContext.mounted) {
-                          ScaffoldMessenger.of(stateContext).showSnackBar(
-                            const SnackBar(
-                              content: Text('Avatar updated!'),
-                              backgroundColor: Colors.green,
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
+                        try {
+                          await FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(_currentUserId!)
+                              .update({'avatar': avatar.name});
+                          await _loadUserData();
+                          if (stateContext.mounted) {
+                            ScaffoldMessenger.of(stateContext).showSnackBar(
+                              const SnackBar(
+                                content: Text('Avatar updated!'),
+                                backgroundColor: Colors.green,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (stateContext.mounted) {
+                            ScaffoldMessenger.of(stateContext).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                    'Could not save avatar: $e\nTry again.'),
+                                backgroundColor: AppColors.error,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
                         }
                       },
                       child: Column(

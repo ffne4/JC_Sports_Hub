@@ -67,6 +67,14 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
       return;
     }
 
+    // Confirm the number before any Firestore write happens.
+    final bool confirmed = await _confirmWithdrawal(
+      amount: _enteredAmount,
+      netAmount: _enteredAmount * (1 - WalletService.withdrawalChargeRate),
+      momoNumber: momoNumber,
+    );
+    if (!confirmed || !mounted) return;
+
     setState(() => _isSubmitting = true);
 
     final result = await _walletService.requestWithdrawal(
@@ -90,6 +98,100 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
         Navigator.pop(context);
       }
     }
+  }
+
+  // Shows a confirmation dialog with the entered mobile money number and the
+  // net amount the user will receive. Returns true only if the user confirms,
+  // false if they cancel (the user stays on the screen either way).
+  Future<bool> _confirmWithdrawal({
+    required double amount,
+    required double netAmount,
+    required String momoNumber,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+        ),
+        title: const Text('Confirm Withdrawal',
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'You are about to withdraw UGX ${amount.toInt()} to the following mobile money number:',
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+                border:
+                    Border.all(color: AppColors.primary.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.phone_android,
+                      color: AppColors.primary, size: 22),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          momoNumber,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: AppSizes.fontLarge,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        Text(
+                          'You will receive UGX ${netAmount.toInt()} after the 12% charge',
+                          style: TextStyle(
+                              color: Colors.grey.shade600, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Is this number correct?',
+              style: TextStyle(
+                  color: Colors.grey.shade800, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            icon: const Icon(Icons.check),
+            label: const Text('Confirm'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppSizes.radiusSmall),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
   }
 
   @override

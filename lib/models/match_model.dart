@@ -28,6 +28,10 @@ class MatchModel {
   final Map<String, dynamic> bets;
   final bool winnersDistributed;
   final DateTime createdAt;
+  final int betsCount;
+  final double poolAmount;
+  final String tournamentId;
+  final String fixtureId;
 
   const MatchModel({
     required this.id,
@@ -50,6 +54,10 @@ class MatchModel {
     required this.bets,
     required this.winnersDistributed,
     required this.createdAt,
+    this.betsCount = 0,
+    this.poolAmount = 0,
+    this.tournamentId = '',
+    this.fixtureId = '',
   });
 
   factory MatchModel.fromFirestore(DocumentSnapshot doc) {
@@ -75,6 +83,10 @@ class MatchModel {
       bets: Map<String, dynamic>.from(data['bets'] ?? {}),
       winnersDistributed: data['winnersDistributed'] ?? false,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      betsCount: data['betsCount'] ?? 0,
+      poolAmount: (data['poolAmount'] ?? 0).toDouble(),
+      tournamentId: data['tournamentId'] ?? '',
+      fixtureId: data['fixtureId'] ?? '',
     );
   }
 }

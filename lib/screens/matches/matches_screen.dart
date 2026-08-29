@@ -59,7 +59,7 @@ class _MatchesScreenState extends State<MatchesScreen>
           unselectedLabelColor: Colors.white60,
           tabs: const [
             Tab(text: 'Upcoming'),
-            Tab(text: 'Live ðŸ”´'),
+            Tab(text: 'Live 🔴'),
             Tab(text: 'Completed'),
           ],
         ),
@@ -412,7 +412,7 @@ class _MatchesScreenState extends State<MatchesScreen>
                           color: Colors.red, shape: BoxShape.circle),
                     ),
                     const SizedBox(width: 8),
-                    const Text('Match in progress â€” betting is closed',
+                    const Text('Match in progress — betting is closed',
                         style: TextStyle(
                             color: Colors.red,
                             fontSize: AppSizes.fontSmall,
@@ -680,7 +680,7 @@ class _MatchesScreenState extends State<MatchesScreen>
             ),
             const SizedBox(height: 4),
             Text(
-                'Example: 1000 UGX Ã— ${odds.toStringAsFixed(2)} = ${_fmtAmt((1000 * odds).floor())} UGX if you win',
+                'Example: 1000 UGX × ${odds.toStringAsFixed(2)} = ${_fmtAmt((1000 * odds).floor())} UGX if you win',
                 style: TextStyle(color: Colors.grey.shade500, fontSize: 10)),
             const SizedBox(height: 12),
             TextField(
@@ -838,15 +838,15 @@ class _MatchesScreenState extends State<MatchesScreen>
   String _getSportIcon(String sport) {
     switch (sport.toLowerCase()) {
       case 'football':
-        return 'âš½';
+        return '⚽';
       case 'basketball':
-        return 'ðŸ€';
+        return '🏀';
       case 'volleyball':
-        return 'ðŸ';
+        return '🏐';
       case 'athletics':
-        return 'ðŸƒ';
+        return '🏃';
       default:
-        return 'ðŸ†';
+        return '🏆';
     }
   }
 

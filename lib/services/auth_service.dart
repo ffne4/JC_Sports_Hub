@@ -166,17 +166,31 @@ class AuthService {
 
   Future<Map<String, dynamic>> resetPassword({required String email}) async {
     try {
-      await _auth.sendPasswordResetEmail(email: email);
+      // Standard Firebase Auth email reset. This works regardless of any
+      // custom OTP/SMTP setup and uses Firebase's own email template + action
+      // handler, so it reliably delivers a reset link the user can click.
+      await _auth.sendPasswordResetEmail(email: email.trim());
       return {
         'success': true,
-        'message': 'Password reset email sent. Check your inbox.'
+        'message':
+            'A password reset email has been sent to ${email.trim()}. Open the link it contains to reset your password.'
       };
     } on FirebaseAuthException catch (e) {
-      return {'success': false, 'message': _getAuthErrorMessage(e.code)};
+      // Show the REAL Firebase error so the cause is never hidden.
+      final human = switch (e.code) {
+        'user-not-found' => 'No account found with this email.',
+        'invalid-email' => 'The email address is not valid.',
+        'too-many-requests' =>
+          'Too many requests. Please wait a moment and try again.',
+        'network-request-failed' =>
+          'No internet connection. Please check your network.',
+        _ => e.message ?? 'Password reset failed.',
+      };
+      return {'success': false, 'message': human};
     } catch (e) {
       return {
         'success': false,
-        'message': 'Something went wrong. Please check your internet and try again.'
+        'message': 'Something went wrong: $e'
       };
     }
   }
@@ -186,34 +200,41 @@ class AuthService {
   // email. Returns the oobCode so confirmPasswordReset can apply the new
   // password immediately, or null so the caller can fall back to the email.
   Future<String?> _fetchResetOobCode(String email) async {
-    try {
-      final apiKey = _auth.app.options.apiKey;
-      final uri = Uri.parse(
-          'https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=$apiKey');
-      final resp = await http
-          .post(
-            uri,
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'requestType': 'RESET_PASSWORD',
-              'email': email,
-              'returnOobLink': true,
-            }),
-          )
-          .timeout(const Duration(seconds: 20));
-      if (resp.statusCode != 200) return null;
-
-      final data = jsonDecode(resp.body) as Map<String, dynamic>;
-      // Depending on the API version the link comes back in "oobLink" or in
-      // the "email" field; a regex pulls the oobCode from either.
-      final link = ((data['oobLink'] ?? data['email']) ?? '').toString();
-      final match = RegExp(r'[?&]oobCode=([A-Za-z0-9_\-\.]+)').firstMatch(link);
-      if (match != null) return match.group(1);
-      final direct = (data['oobCode'] ?? data['code'] ?? '').toString();
-      return direct.isNotEmpty ? direct : null;
-    } catch (_) {
-      return null;
+    final apiKey = _auth.app.options.apiKey;
+    // "PASSWORD_RESET" is the documented requestType; "RESET_PASSWORD" is the
+    // legacy alias some projects still accept - try both so the in-app reset
+    // never silently falls back to the email link.
+    for (final requestType in ['PASSWORD_RESET', 'RESET_PASSWORD']) {
+      try {
+        final uri = Uri.parse(
+            'https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=$apiKey');
+        final resp = await http
+            .post(
+              uri,
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'requestType': requestType,
+                'email': email,
+                'returnOobLink': true,
+              }),
+            )
+            .timeout(const Duration(seconds: 20));
+        if (resp.statusCode == 200) {
+          final data = jsonDecode(resp.body) as Map<String, dynamic>;
+          // Depending on the API version the link comes back in "oobLink" or
+          // in the "email" field; a regex pulls the oobCode from either.
+          final link = ((data['oobLink'] ?? data['email']) ?? '').toString();
+          final match =
+              RegExp(r'[?&]oobCode=([A-Za-z0-9_\-\.]+)').firstMatch(link);
+          if (match != null) return match.group(1);
+          final direct = (data['oobCode'] ?? data['code'] ?? '').toString();
+          if (direct.isNotEmpty) return direct;
+        }
+      } catch (_) {
+        // try the next requestType
+      }
     }
+    return null;
   }
 
   // Forgot-password step 3: the user entered the correct OTP (step 2) and now

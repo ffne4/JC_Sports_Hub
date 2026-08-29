@@ -58,6 +58,7 @@ class MatchService {
     required double oddsA,
     required double oddsB,
     String adminNotes = '',
+    String tournamentId = '',
   }) async {
     try {
       await _firestore.collection(_collection).add({
@@ -77,11 +78,17 @@ class MatchService {
         'totalPool': 0,
         'poolA': 0,
         'poolB': 0,
+        // Betting pool counters (used by the Matches tracking screens).
+        'betsCount': 0,
+        'poolAmount': 0,
         'votedBy': [],
         'userVotes': {},
         'bets': {},
         'winnersDistributed': false,
         'isFrozen': false,
+        // Optional linkage so tournament-sourced matches can be traced back.
+        'tournamentId': tournamentId,
+        'fixtureId': '',
         'createdAt': FieldValue.serverTimestamp(),
       });
       return {
