@@ -73,7 +73,7 @@ The app is **admin-driven**: the admin publishes tournaments, schedules matches,
 ##  Screenshots
 
 > Add screenshots of your app here when ready (Android `adb exec-out screencap -p > screen.png` or an emulator snapshot).
-<img width="360" height="780" alt="Login" src="https://github.com/user-attachments/assets/44a1a754-2d11-4297-9a7e-e41d538221b9" />
+
 
 
 
