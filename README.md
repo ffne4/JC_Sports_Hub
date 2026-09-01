@@ -4,7 +4,7 @@
   <img src="https://api.dicebear.com/7.x/adventurer/png?seed=JC&backgroundColor=1B5E20&size=256" width="110" height="110" alt="JC Sports Hub logo"/>
 </p>
 
-# 🏟️ JC Sports Hub
+#  JC Sports Hub
 
 ### Sports Management & Community App for Makerere University **Jinja Campus**
 
@@ -27,7 +27,7 @@
 
 ##  About
 
-**JC Sports Hub** is a complete sports-management and social platform built for **Makerere University Jinja Campus**. Students can follow match schedules, place bets with virtual credits, deposit and withdraw from a mobile-money wallet, register for university teams, and follow the campus **Inter-Tribe Games** tournament — all from one app.
+**JC Sports Hub** is a complete sports-management and social platform built for **Makerere University Jinja Campus**. Students can follow match schedules, place bets with virtual credits, deposit and withdraw from a mobile-money wallet, register for university teams, and follow the campus **Inter-Tribe Games** tournament, all from one app.
 
 The app is **admin-driven**: the admin publishes tournaments, schedules matches, sets odds, verifies team registrations, and manually confirms wallet deposits/withdrawals through a dedicated admin panel.
 
@@ -42,18 +42,18 @@ The app is **admin-driven**: the admin publishes tournaments, schedules matches,
 
 ###  Matches & Bets
 - **Upcoming / Live  / Completed** match tabs streaming live from Firestore
-- Admin **Match Scheduler** — setup sport, teams, venue, odds (1.5×, 2.0×), date & notes
+- Admin **Match Scheduler**  setup sport, teams, venue, odds (1.5×, 2.0×), date & notes
 - **Place a Bet** against live odds with stake amounts from your wallet
 - Vote on predictions, view potential winnings, and track settled results
 
 ###  Wallet (Mobile Money)
-- **Deposit workflow** — get the admin's MoMo number + reference code, then the admin confirms receipt
-- **Withdrawal workflow** — request a payout with a **confirmation dialog**, 12% charge applied, funds held in `pendingWithdrawal`
+- **Deposit workflow**  get the admin's MoMo number + reference code, then the admin confirms receipt
+- **Withdrawal workflow**  request a payout with a **confirmation dialog**, 12% charge applied, funds held in `pendingWithdrawal`
 - Live balance & transaction history, atomic Firestore transactions (no drift between balance & request)
 
 ###  Tournaments (Inter-Tribe Games 2026)
-- Dynamic user screen — name, campus, season, status (UPCOMING / LIVE / DONE), reg dates, league dates & the Fixtures / Register / Standings / Fairness tabs all driven by Firestore
-- Admin management — create, edit, **publish fixtures to Matches**, reseed, change status, delete
+- Dynamic user screen name, campus, season, status (UPCOMING / LIVE / DONE), reg dates, league dates & the Fixtures / Register / Standings / Fairness tabs all driven by Firestore
+- Admin management  create, edit, **publish fixtures to Matches**, reseed, change status, delete
 - Verified workbook fixtures, results entry, automatic **points table** recalculation
 - Squad registration + fairness view for match-day scheduling
 
@@ -64,15 +64,18 @@ The app is **admin-driven**: the admin publishes tournaments, schedules matches,
 
 ### Admin Panel
 - Moderate **pending posts**, publish **announcements**, reply to **suggestions**
-- **Manage Matches** — schedule, edit odds, update live scores/status, delete
-- **Wallet** — confirm/reject deposits & withdrawals
-- **Tournaments** — one-tap Inter-Tribe 2026 creation, fixture seeding, publish-to-matches
+- **Manage Matches** schedule, edit odds, update live scores/status, delete
+- **Wallet** confirm/reject deposits & withdrawals
+- **Tournaments** one-tap Inter-Tribe 2026 creation, fixture seeding, publish-to-matches
 
 ---
 
 ##  Screenshots
 
 > Add screenshots of your app here when ready (Android `adb exec-out screencap -p > screen.png` or an emulator snapshot).
+
+
+
 
 <div align="center">
 
@@ -88,7 +91,7 @@ The app is **admin-driven**: the admin publishes tournaments, schedules matches,
 
 ---
 
-## 🛠 Tech Stack
+##  Tech Stack
 
 | Layer | Technologies |
 |-------|--------------|
