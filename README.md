@@ -242,3 +242,97 @@ teams/{id}                      # team player registrations (isVerified by admin
 notifications/{id}              # per-user push notifications
 suggestions/{id}                # user suggestions + admin replies
 ```
+---
+
+## ⚙️ Configuration
+
+Almost everything in the app is configurable from two small files — no rebuild-hunting required.
+
+### 🔑 `lib/utils/constants.dart` — app-wide constants
+
+| Constant | Purpose |
+|----------|---------|
+| `AppStrings.adminEmail` | The **only** email granted admin access across the app |
+| `AppStrings.adminMomoNumber` / `adminMomoName` | Mobile-money number shown to users when depositing |
+| `AppStrings.bachelorDomain` | Restricts sign-up to official Makerere student webmails |
+| `AppColors.primary` | Brand green (`#1B5E20`) used across the UI |
+
+> ⚠️ Change `adminEmail` to your real webmail before going live, and replace
+> `adminMomoNumber` with the MoMo line you actually collect deposits on.
+
+### 🔐 `lib/utils/secrets.dart` — SMTP credentials (gitignored)
+
+This file is **never committed**. Create it locally with your email app-password:
+
+```dart
+class AppSecrets {
+  static const String senderEmail = 'youraccount@gmail.com';
+  static const String smtpServer = 'smtp://youraccount@gmail.com:your-app-password@smtp.gmail.com:587';
+}
+```
+
+### ☁️ Firebase Console settings
+
+| Setting | Where | Requirement |
+|---------|-------|-------------|
+| **Email/Password** provider | Authentication → Sign-in method | Must be **enabled** |
+| **Password reset** template | Authentication → Templates | Enable + keep default action URL `https://<project-id>.firebaseapp.com/__/auth/action` |
+| **Email verification** template | Authentication → Templates | Enable so sign-up OTPs are deliverable |
+| **Security rules** | Firestore → Rules | Deploy the repo's [`firestore.rules`](firestore.rules) |
+| **App Check** | App Check | Enabled via Play Integrity (falls back to debug builds) |
+
+---
+
+## 🤝 Contributing
+
+Contributions make the JC Sports Hub community stronger. Please follow these steps:
+
+1. **Fork** the repository on GitHub.
+2. **Create a feature branch:**
+
+   ```bash
+   git checkout -b feat/my-awesome-feature
+   ```
+
+3. **Commit your changes** with a clear message:
+
+   ```bash
+   git commit -am "feat: add live match commentary"
+   ```
+
+4. **Run the analyzer** before pushing — the project must stay at **0 errors / 0 warnings**:
+
+   ```bash
+   flutter analyze
+   ```
+
+5. **Push and open a Pull Request:**
+
+   ```bash
+   git push origin feat/my-awesome-feature
+   ```
+
+### ✅ Code style guidelines
+
+- Keep screens in `lib/screens/<feature>/` and business logic in `lib/services/`.
+- Pull data through **Firestore streams** (`StreamBuilder`) for live UI updates.
+- Prefer `AppColors` / `AppSizes` constants over hard-coded values.
+- Never commit `secrets.dart`, `google-services.json`, or `GoogleService-Info.plist` — they are gitignored.
+
+---
+
+## 📄 License
+
+This project is developed for **Makerere University Jinja Campus** as an internal community project.
+
+Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for more information (add one if you plan to open-source).
+
+---
+
+<div align="center">
+
+**JC Sports Hub** — Built with 💚 by **[Drake Wanswa](https://github.com/)** · For the students of Makerere University Jinja Campus
+
+[↑ Back to top](#-jc-sports-hub)
+
+</div>
